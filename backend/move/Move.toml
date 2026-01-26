@@ -1,0 +1,12 @@
+[package]
+name = "shelby_drive"
+version = "1.0.0"
+authors = ["Hieuwb"]
+
+[addresses]
+shelby_drive = "0x0f99087870768927070b364eb50e505a44755df7e6beb7b0b3d4ecc98c15bbad"
+
+[dependencies.AptosFramework]
+git = "https://github.com/aptos-labs/aptos-framework.git"
+rev = "main"
+subdir = "aptos-framework"

@@ -22,9 +22,6 @@ export const aptosClient = new Aptos(
 export const shelbyClient = new ShelbyClient({
   network: Network.SHELBYNET as any,
   apiKey: SHELBY_API_KEY || "",
-  rpc: {
-    baseUrl: "https://api.shelbynet.shelby.xyz/shelby",
-  }
 });
 
 export const getAptosClient = () => aptosClient;

@@ -40,9 +40,7 @@ export const useDownloadFile = (): UseDownloadFileReturn => {
             ? `shelby://${addrStr}/${id}`
             : id;
 
-          console.log(`📥 [Trial] ID: ${targetId}`);
-          console.log(`📥 Target Account Namespace: ${addrStr}`);
-          console.log(`📥 Using SDK BaseURL:`, getShelbyClient().baseUrl);
+          console.log(`📥 Downloading ${targetId}...`);
 
           const blob = await getShelbyClient().download({
             account: account.address,

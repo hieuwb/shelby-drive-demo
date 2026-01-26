@@ -6,6 +6,7 @@ import Header from "@/components/header"
 import Sidebar from "@/components/sidebar"
 import FileExplorer from "@/components/file-explorer"
 import WelcomeScreen from "@/components/welcome-screen"
+import { NetworkChecker } from "@/components/network-checker"
 
 export default function DrivePage() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
@@ -24,16 +25,19 @@ export default function DrivePage() {
 
   return (
     <div className="flex h-screen bg-background text-foreground">
-      <Sidebar 
-        isOpen={sidebarOpen} 
+      <Sidebar
+        isOpen={sidebarOpen}
         onToggle={() => setSidebarOpen(!sidebarOpen)}
         onNavigationChange={setCurrentView}
         onUploadSuccess={handleUploadSuccess}
       />
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header />
-        <FileExplorer 
-          walletAddress={walletAddress} 
+        <div className="p-4">
+          <NetworkChecker />
+        </div>
+        <FileExplorer
+          walletAddress={walletAddress}
           currentView={currentView}
           refreshTrigger={refreshTrigger}
         />

@@ -86,9 +86,6 @@ export default function Sidebar({ isOpen, onToggle, onNavigationChange, onUpload
           } bg-sidebar border-r border-sidebar-border transition-all duration-300 flex flex-col overflow-hidden lg:relative fixed lg:w-64 h-[calc(100vh-64px)] z-30`}
       >
         <div className="p-6 space-y-4">
-          {/* Wallet Info */}
-          <WalletInfo />
-
           <Button
             onClick={handleUploadClick}
             disabled={isUploading}
@@ -147,8 +144,8 @@ function NavItem({
     <button
       onClick={onClick}
       className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${isSelected
-          ? "bg-sidebar-primary text-sidebar-primary-foreground"
-          : "text-sidebar-foreground hover:bg-sidebar-accent/20"
+        ? "bg-sidebar-primary text-sidebar-primary-foreground"
+        : "text-sidebar-foreground hover:bg-sidebar-accent/20"
         }`}
     >
       {icon}

@@ -1,9 +1,11 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useWallet } from "@aptos-labs/wallet-adapter-react"
-import { Cloud, Wallet, LogOut, Coins } from "lucide-react"
+import { Cloud, Wallet, LogOut, Coins, ExternalLink, PlusCircle, RefreshCcw } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { aptosClient } from "@/lib/shelby-client"
+import { MODULE_ADDRESS as MODULE_ADDR, SHELBY_COIN_ADDRESS } from "@/abi/config"
 
 interface TokenBalance {
   apt: number;
@@ -11,16 +13,18 @@ interface TokenBalance {
 }
 
 export default function Header() {
-  const { connected, account, disconnect, connect, wallets } = useWallet()
+  const { connected, account, disconnect, connect, wallets, signAndSubmitTransaction } = useWallet()
   const [connecting, setConnecting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [balances, setBalances] = useState<TokenBalance>({ apt: 0, shelby: 0 })
+  const [isDriveInitialized, setIsDriveInitialized] = useState<boolean | null>(null)
+  const [initializing, setInitializing] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
 
   const handleConnectWallet = async () => {
     setConnecting(true)
     setError(null)
     try {
-      // Check if any Aptos wallet is available
       if (!wallets || wallets.length === 0) {
         setError("INSTALL_PETRA")
         setConnecting(false)
@@ -31,8 +35,6 @@ export default function Header() {
       await connect(availableWallet.name)
     } catch (error: any) {
       console.error("Failed to connect wallet:", error)
-
-      // Check if error is because wallet is not installed
       if (error?.message?.toLowerCase().includes("not installed") ||
         error?.message?.toLowerCase().includes("not found") ||
         (!wallets || wallets.length === 0)) {
@@ -61,66 +63,92 @@ export default function Header() {
     return balance.toFixed(2)
   }
 
-  useEffect(() => {
-    const fetchBalances = async () => {
-      if (!account?.address) return
+  const fetchBalances = useCallback(async () => {
+    if (!account?.address) return
 
+    try {
+      const address = String(account.address)
+
+      // Helper to ensure 0x prefix and lowercase
+      const formatAddr = (addr: string) => addr.startsWith('0x') ? addr.toLowerCase() : `0x${addr}`.toLowerCase();
+      const userAddr = formatAddr(address);
+      const metadataAddr = formatAddr(SHELBY_COIN_ADDRESS);
+
+      console.log("📊 Fetching balances for:", userAddr);
+
+      // 1. Fetch APT balance (Legacy CoinStore check)
       try {
-        const address = String(account.address)
-
-        // Fetch APT balance using view function
-        const aptResponse = await fetch(
-          `https://api.shelbynet.shelby.xyz/v1/view`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              function: '0x1::coin::balance',
-              type_arguments: ['0x1::aptos_coin::AptosCoin'],
-              arguments: [address]
-            })
-          }
-        )
-
-        if (aptResponse.ok) {
-          const aptData = await aptResponse.json()
-          // Response is an array like ["2099219800"]
-          const aptBalance = parseInt(aptData[0] || "0") / 100000000
-          setBalances(prev => ({ ...prev, apt: aptBalance }))
-        }
-
-        // Fetch ShelbyUSD balance using view function (may fail if coin not registered)
-        try {
-          const shelbyResponse = await fetch(
-            `https://api.shelbynet.shelby.xyz/v1/view`,
-            {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                function: '0x1::coin::balance',
-                type_arguments: ['0x1b18363a9f1fe5e6ebf247daba5cc1c18052bb232efdc4c50f556053922d98e1::shelbyusd::ShelbyUSD'],
-                arguments: [address]
-              })
-            }
-          )
-          if (shelbyResponse.ok) {
-            const shelbyData = await shelbyResponse.json()
-            const shelbyBalance = parseInt(shelbyData[0] || "0") / 100000000
-            setBalances(prev => ({ ...prev, shelby: shelbyBalance }))
-          }
-        } catch (shelbyError) {
-          // Ignore if ShelbyUSD not registered
-          console.log("ShelbyUSD not available");
-        }
-      } catch (error) {
-        console.error("Error fetching balances:", error)
+        const aptBalanceData = await aptosClient.view({
+          payload: {
+            function: "0x1::coin::balance",
+            typeArguments: ["0x1::aptos_coin::AptosCoin"],
+            functionArguments: [userAddr],
+          },
+        });
+        setBalances(prev => ({ ...prev, apt: Number(aptBalanceData[0] || 0) / 100_000_000 }));
+      } catch (aptError: any) {
+        // Fallback to simpler check if view fails
+        setBalances(prev => ({ ...prev, apt: 0 }));
       }
-    }
 
+      // 2. Fetch ShelbyUSD (Fungible Asset)
+      let shelbyBalance = 0;
+      try {
+        // Try with 1 type argument as Shelbynet RPC expects
+        const shelbyBalanceData = await aptosClient.view({
+          payload: {
+            function: "0x1::primary_fungible_store::balance",
+            typeArguments: ["0x1::fungible_asset::Metadata"],
+            functionArguments: [userAddr, metadataAddr],
+          },
+        });
+        shelbyBalance = Number(shelbyBalanceData[0] || 0);
+      } catch (shelbyError: any) {
+        // Fallback 1: Try WITHOUT type arguments
+        try {
+          const fallbackData = await aptosClient.view({
+            payload: {
+              function: "0x1::primary_fungible_store::balance",
+              typeArguments: [],
+              functionArguments: [userAddr, metadataAddr],
+            },
+          });
+          shelbyBalance = Number(fallbackData[0] || 0);
+        } catch (e) {
+          // Fallback 2: Check for ANY FungibleStore resource if view fails
+          shelbyBalance = 0;
+        }
+      }
+      setBalances(prev => ({ ...prev, shelby: shelbyBalance / 100_000_000 }));
+
+      // 3. Check if Drive is initialized
+      try {
+        await aptosClient.getAccountResource({
+          accountAddress: userAddr,
+          resourceType: `${MODULE_ADDR}::drive::Drive`,
+        });
+        setIsDriveInitialized(true);
+      } catch (resourceError: any) {
+        if (resourceError.status === 404 || resourceError.message?.includes("not found")) {
+          setIsDriveInitialized(false);
+        }
+      }
+    } catch (error) {
+      console.error("Critical error in balance fetch system:", error);
+    }
+  }, [account?.address]);
+
+  useEffect(() => {
     fetchBalances()
-    const interval = setInterval(fetchBalances, 30000) // Refresh every 30s
+    const interval = setInterval(fetchBalances, 15000)
     return () => clearInterval(interval)
-  }, [account?.address])
+  }, [fetchBalances])
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await fetchBalances();
+    setTimeout(() => setRefreshing(false), 500);
+  }
 
   return (
     <header className="bg-card border-b border-border h-16 flex items-center justify-between px-6">
@@ -136,17 +164,71 @@ export default function Header() {
               <Coins className="w-4 h-4 text-yellow-500" />
               <span className="text-sm font-medium">{formatBalance(balances.apt)} APT</span>
             </div>
-            {balances.shelby > 0 && (
-              <>
-                <div className="w-px h-4 bg-border" />
-                <div className="flex items-center gap-1.5">
-                  <Coins className="w-4 h-4 text-blue-500" />
-                  <span className="text-sm font-medium">{formatBalance(balances.shelby)} SHELBY</span>
-                </div>
-              </>
-            )}
+            <div className="w-px h-4 bg-border" />
+            <div className="flex items-center gap-1.5">
+              <Coins className="w-4 h-4 text-blue-500" />
+              <span className="text-sm font-medium">{formatBalance(balances.shelby)} SHELBY</span>
+            </div>
           </div>
-          <div className="text-sm text-muted-foreground">{formatAddress(String(account.address))}</div>
+          <div className="text-sm text-muted-foreground font-mono">{formatAddress(String(account.address))}</div>
+
+          <div className="flex items-center gap-2">
+            <Button
+              onClick={() => window.open("https://docs.shelby.xyz/apis/faucet/shelbyusd", "_blank")}
+              variant="outline"
+              size="sm"
+              className="flex items-center gap-2 border-yellow-200 bg-yellow-50/30 text-yellow-700 hover:bg-yellow-50 h-8 text-xs font-semibold"
+            >
+              <ExternalLink className="w-3 h-3" />
+              Faucet APT & SHELBY
+            </Button>
+
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className={`h-8 w-8 p-0 ${refreshing ? 'animate-spin' : ''}`}
+              title="Reload Balance"
+            >
+              <RefreshCcw className="w-4 h-4 text-muted-foreground" />
+            </Button>
+          </div>
+
+          {isDriveInitialized === false && (
+            <Button
+              onClick={async () => {
+                try {
+                  setInitializing(true);
+                  const tx: any = {
+                    data: {
+                      function: `${MODULE_ADDR}::drive::initialize_drive`,
+                      typeArguments: [],
+                      functionArguments: [],
+                    }
+                  };
+                  const response = await signAndSubmitTransaction(tx);
+                  await aptosClient.waitForTransaction({ transactionHash: response.hash });
+                  setIsDriveInitialized(true);
+                  alert("✅ Drive initialized successfully!");
+                  await fetchBalances();
+                } catch (error: any) {
+                  console.error("Initialization error:", error);
+                  alert("❌ Failed to initialize drive: " + error.message);
+                } finally {
+                  setInitializing(false);
+                }
+              }}
+              disabled={initializing}
+              variant="default"
+              size="sm"
+              className="flex items-center gap-2 bg-accent hover:bg-accent/90 text-white"
+            >
+              <PlusCircle className="w-4 h-4" />
+              {initializing ? "Initializing..." : "Initialize Drive"}
+            </Button>
+          )}
+
           <Button
             onClick={handleDisconnect}
             variant="ghost"

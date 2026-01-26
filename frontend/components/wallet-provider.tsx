@@ -11,7 +11,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       autoConnect={true}
       dappConfig={{
         network: Network.SHELBYNET,
-        transactionSubmitter: aptosClient as any,
         aptosApiKeys: {
           shelbynet: process.env.NEXT_PUBLIC_SHELBY_API_KEY,
         },

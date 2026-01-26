@@ -116,7 +116,6 @@ export const useUploadFile = (): UseUploadFileReturn => {
         // Old contract signature: add_file(signer, folder_id: u64, blob_id: vector<u8>, name: vector<u8>, size: u64, extension: vector<u8>, is_encrypted: bool)
         console.log("⚙ Adding file record to drive...");
 
-        // Get file extension
         const extMatch = file.name.match(/\.([^.]+)$/);
         const extension = extMatch ? extMatch[1] : "";
 

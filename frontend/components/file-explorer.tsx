@@ -254,18 +254,6 @@ export default function FileExplorer({ walletAddress, currentView = "my-drive", 
               >
                 <div className="aspect-video bg-secondary/30 rounded-lg flex items-center justify-center mb-4 overflow-hidden relative">
                   {getFileIcon(file.mime_type)}
-
-                  <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 w-8 p-0 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-full text-white"
-                      onClick={() => handleDownload(file)}
-                      disabled={isDownloading}
-                    >
-                      <Download className="w-4 h-4" />
-                    </Button>
-                  </div>
                 </div>
 
                 <div className="space-y-1">
@@ -274,6 +262,16 @@ export default function FileExplorer({ walletAddress, currentView = "my-drive", 
                       {file.name}
                     </p>
                     <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 w-7 p-0 text-muted-foreground hover:text-primary"
+                        onClick={() => handleDownload(file)}
+                        disabled={isDownloading}
+                        title="Download"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                      </Button>
                       <Button
                         variant="ghost"
                         size="sm"

@@ -42,7 +42,8 @@ export const useUploadFile = (): UseUploadFileReturn => {
       try {
         console.log("=== START FILE UPLOAD ===");
         console.log(`📝 File: ${file.name}, Size: ${file.size} bytes`);
-        console.log(`🔑 Account: ${account.address}`);
+        const address = account.address.toString();
+        console.log(`🔑 Account: ${address}`);
 
         // Check balance first
         try {
@@ -80,19 +81,20 @@ export const useUploadFile = (): UseUploadFileReturn => {
         // - Full name for Shelby network: shelby://account/timestamp-filename
         const timestamp = Date.now();
         const shortBlobName = `${timestamp}-${file.name}`;
-        const fullBlobName = `shelby://${account.address}/${shortBlobName}`;
+        // Standard: Registration name is just the path/name, account namespace is handled by API
+        const blobRegistrationName = shortBlobName;
 
-        // 3. Register blob on blockchain using FULL NAME
+        // 3. Register blob on blockchain using BARE NAME
         const payload = ShelbyBlobClient.createRegisterBlobPayload({
-          account: account.address,
-          blobName: fullBlobName,
+          account: account.address, // directly from account for correct type
+          blobName: blobRegistrationName,
           blobMerkleRoot: commitments.blob_merkle_root,
           numChunksets: expectedTotalChunksets(commitments.raw_data_size),
           expirationMicros: (Date.now() + 30 * 24 * 60 * 60 * 1000) * 1000, // 30 days
           blobSize: commitments.raw_data_size,
         });
 
-        console.log("⚙ Submitting blockchain transaction for:", fullBlobName);
+        console.log("⚙ Submitting blockchain transaction for:", blobRegistrationName);
         const txResult = await signAndSubmitTransaction({ data: payload });
         console.log("✓ Transaction submitted:", txResult.hash);
 
@@ -102,15 +104,15 @@ export const useUploadFile = (): UseUploadFileReturn => {
         });
         console.log("✓ Transaction confirmed");
 
-        // 4. Upload to Shelby RPC using FULL NAME
+        // 4. Upload to Shelby RPC using BARE NAME
         console.log("⚙ Uploading to Shelby network...");
         await getShelbyClient().rpc.putBlob({
           account: account.address,
-          blobName: fullBlobName,
+          blobName: blobRegistrationName,
           blobData: new Uint8Array(fileBuffer),
         });
 
-        console.log("✓ Uploaded to Shelby:", fullBlobName);
+        console.log("✓ Uploaded to Shelby:", blobRegistrationName);
 
         // 5. Add file record to drive contract using SHORT NAME
         // Old contract signature: add_file(signer, folder_id: u64, blob_id: vector<u8>, name: vector<u8>, size: u64, extension: vector<u8>, is_encrypted: bool)
@@ -125,11 +127,11 @@ export const useUploadFile = (): UseUploadFileReturn => {
             typeArguments: [],
             functionArguments: [
               0, // 1. folder_id - root folder
-              Array.from(new TextEncoder().encode(file.name)),     // 2. name - display name
-              Array.from(new TextEncoder().encode(fullBlobName)),  // 3. blob_id - full URI for storage
-              file.size,                                         // 4. size
-              Array.from(new TextEncoder().encode(extension)),     // 5. extension
-              false,                                             // 6. is_encrypted
+              Array.from(new TextEncoder().encode(file.name)),           // 2. name - display name
+              Array.from(new TextEncoder().encode(blobRegistrationName)), // 3. blob_id - ID for storage
+              file.size,                                               // 4. size
+              Array.from(new TextEncoder().encode(extension)),           // 5. extension
+              false,                                                   // 6. is_encrypted
             ],
           },
         };

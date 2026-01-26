@@ -11,7 +11,7 @@ interface UseDownloadFileReturn {
 }
 
 /**
- * Hook to download file from Shelby network
+ * Hook to download file from Shelby network with robust trial system
  */
 export const useDownloadFile = (): UseDownloadFileReturn => {
   const [isDownloading, setIsDownloading] = useState(false);
@@ -27,23 +27,33 @@ export const useDownloadFile = (): UseDownloadFileReturn => {
       setIsDownloading(true);
       setError(null);
 
-      const tryDownload = async (id: string): Promise<boolean> => {
+      // Clean address string
+      const addrStr = account.address.toString();
+
+      const tryDownload = async (id: string, useFullPrefix: boolean): Promise<boolean> => {
         if (!id || id === "undefined" || id === "") return false;
 
         try {
-          const fullId = id.startsWith("shelby://") ? id : `shelby://${account.address}/${id}`;
-          console.log("📥 Attempting download with ID:", fullId);
-          console.log("📥 BaseURL:", getShelbyClient().baseUrl);
+          // Robust path construction
+          // Standard is bare ID, but some SDK versions or manual trials might want shelby://account/ prefix
+          const targetId = useFullPrefix && !id.startsWith("shelby://")
+            ? `shelby://${addrStr}/${id}`
+            : id;
+
+          console.log(`📥 [Trial] ID: ${targetId}`);
+          console.log(`📥 Target Account Namespace: ${addrStr}`);
+          console.log(`📥 Using SDK BaseURL:`, getShelbyClient().baseUrl);
 
           const blob = await getShelbyClient().download({
             account: account.address,
-            blobName: fullId,
+            blobName: targetId,
           });
 
+          console.log("✅ Download trial success!");
           await processDownload(blob, fileName || id);
           return true;
-        } catch (err) {
-          console.warn(`⚠️ Download trial failed for ${id}:`, err);
+        } catch (err: any) {
+          console.warn(`⚠️ Trial failed for ${id} (prefix=${useFullPrefix}):`, err.message);
           return false;
         }
       };
@@ -75,25 +85,38 @@ export const useDownloadFile = (): UseDownloadFileReturn => {
       };
 
       try {
-        console.log("📥 ===== DOWNLOAD SYSTEM START =====");
+        console.log("📥 ===== ROBUST DOWNLOAD SYSTEM START =====");
 
-        // Trial 1: Principal blob_id
-        let success = await tryDownload(blobName);
+        // Trial 1: Raw contract blob_id (Standard for new version)
+        console.log("🔍 Trial 1: Raw blob_id...");
+        let success = await tryDownload(blobName, false);
 
-        // Trial 2: Alternative name (if swapped)
-        if (!success && altBlobName) {
-          console.log("🔄 Trial 1 failed, trying alternative ID...");
-          success = await tryDownload(altBlobName);
+        // Trial 2: Full prefixed blob_id (Just in case)
+        if (!success) {
+          console.log("🔄 Trial 2: Prefixed blob_id...");
+          success = await tryDownload(blobName, true);
+        }
+
+        // Trial 3: Raw contract name (Recovery for swapped fields)
+        if (!success && altBlobName && altBlobName !== blobName) {
+          console.log("🔄 Trial 3: Raw alternative name...");
+          success = await tryDownload(altBlobName, false);
+        }
+
+        // Trial 4: Full prefixed alternative name
+        if (!success && altBlobName && altBlobName !== blobName) {
+          console.log("🔄 Trial 4: Prefixed alternative name...");
+          success = await tryDownload(altBlobName, true);
         }
 
         if (!success) {
-          throw new Error("Failed to download blob using all known IDs. The file might be expired or the identifier is incorrect.");
+          throw new Error("Failed to download blob using all variations. The file may have expired or was uploaded with an incompatible identifier.");
         }
 
-        console.log("✅ Downloaded successfully");
+        console.log("✅ Download complete!");
       } catch (err: any) {
         const errorMessage = err instanceof Error ? err.message : "Download failed";
-        console.error("❌ Final Download Error:", errorMessage);
+        console.error("❌ Final Exhaustive Download Error:", errorMessage);
         setError(errorMessage);
         throw err;
       } finally {

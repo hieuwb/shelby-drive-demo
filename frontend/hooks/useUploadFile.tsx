@@ -9,8 +9,8 @@ import {
   expectedTotalChunksets,
 } from "@shelby-protocol/sdk/browser";
 import { getShelbyClient } from "@/lib/shelby-client";
+import { MODULE_ADDRESS as MODULE_ADDR } from "@/abi/config";
 
-const MODULE_ADDR = process.env.NEXT_PUBLIC_MODULE_ADDR!;
 
 interface UseUploadFileReturn {
   uploadFile: (file: File, folderId?: number) => Promise<void>;

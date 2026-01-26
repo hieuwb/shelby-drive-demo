@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { motion } from "framer-motion"
 import { useDownloadFile } from "@/hooks/useDownloadFile"
 import { getAptosClient } from "@/lib/shelby-client"
+import { MODULE_ADDRESS } from "@/abi/config"
 
 // Utility function to convert hex string or byte array to string
 function hexOrBytesToString(value: string | number[]): string {
@@ -67,7 +68,7 @@ export default function FileExplorer({ walletAddress, currentView = "my-drive", 
       try {
         const driveResource = await getAptosClient().getAccountResource({
           accountAddress: walletAddress,
-          resourceType: `${process.env.NEXT_PUBLIC_MODULE_ADDR}::drive::Drive`,
+          resourceType: `${MODULE_ADDRESS}::drive::Drive`,
         });
 
         console.log("📊 Drive resource:", driveResource);
@@ -197,13 +198,13 @@ export default function FileExplorer({ walletAddress, currentView = "my-drive", 
     if (!confirmed) return;
 
     try {
-      const MODULE_ADDR = process.env.NEXT_PUBLIC_MODULE_ADDR;
+      // const MODULE_ADDR = process.env.NEXT_PUBLIC_MODULE_ADDR;
 
       // Old contract: delete_file_record(signer, folder_id: u64, file_index: u64)
       // Note: old contract doesn't support trash, this deletes permanently
       const deleteTransaction: InputTransactionData = {
         data: {
-          function: `${MODULE_ADDR}::drive::delete_file_record`,
+          function: `${MODULE_ADDRESS}::drive::delete_file_record`,
           typeArguments: [],
           functionArguments: [
             0, // folder_id - root folder

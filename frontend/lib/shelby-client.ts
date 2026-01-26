@@ -11,6 +11,7 @@ if (!SHELBY_API_KEY) {
 export const aptosClient = new Aptos(
   new AptosConfig({
     network: Network.SHELBYNET,
+    fullnode: "https://api.shelbynet.shelby.xyz/shelby/v1",
     clientConfig: {
       API_KEY: SHELBY_API_KEY,
     },

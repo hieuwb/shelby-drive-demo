@@ -20,8 +20,11 @@ export const aptosClient = new Aptos(
 
 // Shelby client for file storage
 export const shelbyClient = new ShelbyClient({
-  network: Network.SHELBYNET,
+  network: Network.SHELBYNET as any,
   apiKey: SHELBY_API_KEY || "",
+  rpc: {
+    baseUrl: "https://api.shelbynet.shelby.xyz",
+  }
 });
 
 export const getAptosClient = () => aptosClient;

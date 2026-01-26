@@ -33,13 +33,10 @@ export const useDownloadFile = (): UseDownloadFileReturn => {
         console.log("📥 Account address:", account.address);
         console.log("📥 Target file name:", fileName || blobName);
 
-        // Create full blob name: shelby://account/blobname if not already present
-        // Some records might store full URI, some might store short name
-        let fullBlobName = blobName;
-        if (!blobName.startsWith("shelby://")) {
-          fullBlobName = `shelby://${account.address}/${blobName}`;
-        }
+        const fullBlobName = blobName.startsWith("shelby://") ? blobName : `shelby://${account.address}/${blobName}`;
         console.log("📥 Constructed/Validated full blob name:", fullBlobName);
+        console.log("📥 Using SDK BaseURL:", getShelbyClient().baseUrl);
+        console.log("📥 Targeted Path:", `/v1/blobs/${account.address}/${fullBlobName}`);
 
         // Download from Shelby using full blob name
         const blob = await getShelbyClient().download({

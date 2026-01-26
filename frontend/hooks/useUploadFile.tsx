@@ -127,8 +127,8 @@ export const useUploadFile = (): UseUploadFileReturn => {
             typeArguments: [],
             functionArguments: [
               0, // 1. folder_id - root folder
-              Array.from(new TextEncoder().encode(file.name)),           // 2. name - display name
-              Array.from(new TextEncoder().encode(blobRegistrationName)), // 3. blob_id - ID for storage
+              Array.from(new TextEncoder().encode(blobRegistrationName)), // 2. blob_id - ID for storage
+              Array.from(new TextEncoder().encode(file.name)),           // 3. name - display name
               file.size,                                               // 4. size
               Array.from(new TextEncoder().encode(extension)),           // 5. extension
               false,                                                   // 6. is_encrypted

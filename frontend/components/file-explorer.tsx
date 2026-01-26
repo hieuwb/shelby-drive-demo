@@ -81,22 +81,24 @@ export default function FileExplorer({ walletAddress, currentView = "my-drive", 
         folders.forEach((folder: any, folderIndex: number) => {
           const filesData = folder.files || [];
           filesData.forEach((file: any, fileIndex: number) => {
-            const contractBlobId = hexOrBytesToString(file.blob_id);
             const contractName = hexOrBytesToString(file.name);
+            const contractBlobId = hexOrBytesToString(file.blob_id);
             const extension = hexOrBytesToString(file.extension);
 
             // Intelligently pick display name
             // If one has a timestamp prefix and the other doesn't, pick the one without
-            let displayName = contractBlobId;
-            if (contractName && !contractName.match(/^\d{13}-/) && !contractName.startsWith("shelby://")) {
-              displayName = contractName;
-            } else if (contractBlobId && !contractBlobId.match(/^\d{13}-/) && !contractBlobId.startsWith("shelby://")) {
+            let displayName = contractName;
+            if (contractName && (contractName.match(/^\d{13}-/) || contractName.startsWith("shelby://"))) {
+              if (contractBlobId && !contractBlobId.match(/^\d{13}-/) && !contractBlobId.startsWith("shelby://")) {
+                displayName = contractBlobId;
+              }
+            } else if (!contractName && contractBlobId) {
               displayName = contractBlobId;
             }
 
             allFiles.push({
               id: folderIndex * 1000 + fileIndex,
-              display_name: displayName,
+              display_name: displayName || "Untitled",
               contract_name: contractName,
               contract_blob_id: contractBlobId,
               size: Number(file.size),

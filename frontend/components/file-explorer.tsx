@@ -28,15 +28,16 @@ function hexOrBytesToString(value: any): string {
 }
 
 interface FileItem {
-  id: number // unique ID for frontend keys
-  name: string
-  shelby_blob_name: string
+  id: number
+  display_name: string // Derived name for display
+  contract_name: string // Raw name field from struct
+  contract_blob_id: string // Raw blob_id field from struct
   size: number
   mime_type: string
   is_starred: boolean
   is_deleted: boolean
-  folder_id: number // on-chain folder index
-  file_index: number // on-chain file index in that folder
+  folder_id: number
+  file_index: number
   created_at: number
   modified_at: number
 }
@@ -80,14 +81,24 @@ export default function FileExplorer({ walletAddress, currentView = "my-drive", 
         folders.forEach((folder: any, folderIndex: number) => {
           const filesData = folder.files || [];
           filesData.forEach((file: any, fileIndex: number) => {
-            const blobId = hexOrBytesToString(file.blob_id);
-            const fileName = hexOrBytesToString(file.name);
+            const contractBlobId = hexOrBytesToString(file.blob_id);
+            const contractName = hexOrBytesToString(file.name);
             const extension = hexOrBytesToString(file.extension);
+
+            // Intelligently pick display name
+            // If one has a timestamp prefix and the other doesn't, pick the one without
+            let displayName = contractBlobId;
+            if (contractName && !contractName.match(/^\d{13}-/) && !contractName.startsWith("shelby://")) {
+              displayName = contractName;
+            } else if (contractBlobId && !contractBlobId.match(/^\d{13}-/) && !contractBlobId.startsWith("shelby://")) {
+              displayName = contractBlobId;
+            }
 
             allFiles.push({
               id: folderIndex * 1000 + fileIndex,
-              name: fileName,
-              shelby_blob_name: blobId,
+              display_name: displayName,
+              contract_name: contractName,
+              contract_blob_id: contractBlobId,
               size: Number(file.size),
               mime_type: extension || "application/octet-stream",
               is_starred: false,
@@ -120,14 +131,10 @@ export default function FileExplorer({ walletAddress, currentView = "my-drive", 
 
   const handleDownload = async (file: FileItem) => {
     try {
-      const blobNameFromContract = file.shelby_blob_name;
+      console.log("📥 Download trial for:", file.display_name);
 
-      if (!blobNameFromContract || blobNameFromContract === "undefined" || blobNameFromContract === "") {
-        alert(`⚠️ This file record is corrupted or incompatible. Please re-upload it.`);
-        return;
-      }
-
-      await downloadFile(blobNameFromContract, file.name);
+      // We pass both names to the hook, it will try them sequentially
+      await downloadFile(file.contract_blob_id, file.display_name, file.contract_name);
 
     } catch (error: any) {
       console.error("Download error:", error);
@@ -162,7 +169,7 @@ export default function FileExplorer({ walletAddress, currentView = "my-drive", 
       return;
     }
 
-    const confirmed = confirm(`Are you sure you want to delete file "${file.name}"?`);
+    const confirmed = confirm(`Are you sure you want to delete file "${file.display_name}"?`);
     if (!confirmed) return;
 
     try {
@@ -188,7 +195,7 @@ export default function FileExplorer({ walletAddress, currentView = "my-drive", 
   }
 
   const filteredFiles = files.filter(f =>
-    f.name.toLowerCase().includes(searchQuery.toLowerCase())
+    f.display_name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const formatSize = (bytes: number) => {
@@ -258,8 +265,8 @@ export default function FileExplorer({ walletAddress, currentView = "my-drive", 
 
                 <div className="space-y-1">
                   <div className="flex items-center justify-between">
-                    <p className="font-medium text-foreground truncate pr-2" title={file.name}>
-                      {file.name}
+                    <p className="font-medium text-foreground truncate pr-2" title={file.display_name}>
+                      {file.display_name}
                     </p>
                     <div className="flex items-center gap-1">
                       <Button

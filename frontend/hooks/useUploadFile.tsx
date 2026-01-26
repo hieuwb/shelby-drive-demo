@@ -124,12 +124,12 @@ export const useUploadFile = (): UseUploadFileReturn => {
             function: `${MODULE_ADDR}::drive::add_file`,
             typeArguments: [],
             functionArguments: [
-              0, // folder_id - root folder
-              Array.from(new TextEncoder().encode(fullBlobName)), // blob_id - store FULL URI for reliability
-              Array.from(new TextEncoder().encode(file.name)), // name - original display name
-              file.size, // size as number for u64
-              Array.from(new TextEncoder().encode(extension)), // extension
-              false, // is_encrypted
+              0, // 1. folder_id - root folder
+              Array.from(new TextEncoder().encode(file.name)),     // 2. name - display name
+              Array.from(new TextEncoder().encode(fullBlobName)),  // 3. blob_id - full URI for storage
+              file.size,                                         // 4. size
+              Array.from(new TextEncoder().encode(extension)),     // 5. extension
+              false,                                             // 6. is_encrypted
             ],
           },
         };

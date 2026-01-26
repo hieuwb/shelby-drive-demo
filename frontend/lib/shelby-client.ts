@@ -23,7 +23,7 @@ export const shelbyClient = new ShelbyClient({
   network: Network.SHELBYNET as any,
   apiKey: SHELBY_API_KEY || "",
   rpc: {
-    baseUrl: "https://api.shelbynet.shelby.xyz",
+    baseUrl: "https://api.shelbynet.shelby.xyz/shelby",
   }
 });
 

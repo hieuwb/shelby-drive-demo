@@ -1,11 +1,13 @@
 "use client"
 
 import { useWallet } from "@aptos-labs/wallet-adapter-react"
-import { Network } from "@aptos-labs/ts-sdk"
 import { useEffect, useState } from "react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { AlertTriangle } from "lucide-react"
+import { SHELBY_NETWORK, SHELBY_NETWORK_LABEL } from "@/lib/shelby-client"
+
+const EXPECTED_LABEL = SHELBY_NETWORK_LABEL || "shelbynet"
 
 export function NetworkChecker() {
     const { network, changeNetwork } = useWallet()
@@ -15,9 +17,12 @@ export function NetworkChecker() {
     useEffect(() => {
         if (network?.name) {
             const networkName = network.name.toLowerCase()
-            // Accept both 'shelbynet' and 'custom' since Petra reports Shelbynet as 'custom'
-            const isValidNetwork = networkName === "shelbynet" || networkName === "custom"
-            setWrongNetwork(!isValidNetwork)
+            const accepted = new Set([EXPECTED_LABEL])
+            if (EXPECTED_LABEL === "shelbynet") {
+                // Petra may expose Shelbynet as custom
+                accepted.add("custom")
+            }
+            setWrongNetwork(!accepted.has(networkName))
         } else {
             setWrongNetwork(false)
         }
@@ -27,22 +32,14 @@ export function NetworkChecker() {
         try {
             setSwitching(true)
             if (changeNetwork) {
-                await changeNetwork(Network.SHELBYNET)
+                await changeNetwork(SHELBY_NETWORK)
                 setWrongNetwork(false)
             } else {
                 throw new Error("Network switching not supported")
             }
         } catch (error) {
             console.warn("Auto-switch failed:", error)
-            // Show manual instructions
-            const instructions = `Please switch to Shelbynet manually in your Petra wallet:
-      
-1. Open Petra wallet extension
-2. Click on the network dropdown (currently showing "${network?.name || "Unknown"}")
-3. Select "Shelbynet" from the list
-
-If Shelbynet is not in the list, you may need to add it as a custom network.`
-
+            const instructions = `Please switch network manually in your Petra wallet:\n\n1. Open Petra wallet extension\n2. Click the network dropdown (current: ${network?.name || "Unknown"})\n3. Select ${EXPECTED_LABEL}`
             alert(instructions)
         } finally {
             setSwitching(false)
@@ -57,8 +54,8 @@ If Shelbynet is not in the list, you may need to add it as a custom network.`
             <AlertTitle>Wrong Network</AlertTitle>
             <AlertDescription className="flex flex-col gap-3">
                 <span>
-                    You are on <strong>{network?.name || "Unknown"}</strong> network.
-                    This app requires <strong>Shelbynet</strong>.
+                    You are on <strong>{network?.name || "Unknown"}</strong>.
+                    This app requires <strong>{EXPECTED_LABEL}</strong>.
                 </span>
                 <div className="flex items-center gap-2">
                     <Button
@@ -67,7 +64,7 @@ If Shelbynet is not in the list, you may need to add it as a custom network.`
                         onClick={handleSwitchNetwork}
                         disabled={switching}
                     >
-                        {switching ? "Switching..." : "Switch to Shelbynet"}
+                        {switching ? "Switching..." : `Switch to ${EXPECTED_LABEL}`}
                     </Button>
                     <span className="text-xs text-muted-foreground">
                         Or switch manually in your wallet

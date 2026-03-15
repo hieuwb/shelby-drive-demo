@@ -25,19 +25,20 @@ export default function Header() {
     setConnecting(true)
     setError(null)
     try {
-      if (!wallets || wallets.length === 0) {
+      // Plan: pin wallet connect to Petra so transaction flow and network semantics stay deterministic in Sprint 3.
+      const petraWallet = wallets?.find((wallet) => wallet.name.toLowerCase().includes("petra"))
+      if (!petraWallet) {
         setError("INSTALL_PETRA")
         setConnecting(false)
         return
       }
 
-      const availableWallet = wallets[0]
-      await connect(availableWallet.name)
+      await connect(petraWallet.name)
     } catch (error: any) {
       console.error("Failed to connect wallet:", error)
       if (error?.message?.toLowerCase().includes("not installed") ||
         error?.message?.toLowerCase().includes("not found") ||
-        (!wallets || wallets.length === 0)) {
+        !wallets?.some((wallet) => wallet.name.toLowerCase().includes("petra"))) {
         setError("INSTALL_PETRA")
       } else {
         setError(error?.message || "Failed to connect wallet. Please try again.")
@@ -74,7 +75,7 @@ export default function Header() {
       const userAddr = formatAddr(address);
       const metadataAddr = formatAddr(SHELBY_COIN_ADDRESS);
 
-      console.log("📊 Fetching balances for:", userAddr);
+      console.log("Fetching balances for:", userAddr);
 
       // 1. Fetch APT balance (Legacy CoinStore check)
       try {
@@ -210,11 +211,11 @@ export default function Header() {
                   const response = await signAndSubmitTransaction(tx);
                   await aptosClient.waitForTransaction({ transactionHash: response.hash });
                   setIsDriveInitialized(true);
-                  alert("✅ Drive initialized successfully!");
+                  alert("Drive initialized successfully!");
                   await fetchBalances();
                 } catch (error: any) {
                   console.error("Initialization error:", error);
-                  alert("❌ Failed to initialize drive: " + error.message);
+                  alert("Failed to initialize drive: " + error.message);
                 } finally {
                   setInitializing(false);
                 }
@@ -276,3 +277,4 @@ export default function Header() {
     </header>
   )
 }
+

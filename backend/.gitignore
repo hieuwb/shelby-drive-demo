@@ -1,0 +1,6 @@
+node_modules/
+uploads/
+.env
+.env.*
+move/new-key.txt
+move/new-key.txt.pub

@@ -31,13 +31,12 @@ interface FileItem {
   id: number
   display_name: string // Derived name for display
   contract_name: string // Raw name field from struct
-  contract_blob_id: string // Raw blob_id field from struct
+  contract_blob_id: string // Raw shelby_blob_name field from struct
   size: number
   mime_type: string
   is_starred: boolean
   is_deleted: boolean
   folder_id: number
-  file_index: number
   created_at: number
   modified_at: number
 }
@@ -74,42 +73,27 @@ export default function FileExplorer({ walletAddress, currentView = "my-drive", 
           resourceType: `${MODULE_ADDRESS}::drive::Drive`,
         }) as any;
 
-        // On-chain ABI: Drive -> folders: vector<Folder>, Folder -> files: vector<FileRecord>
-        const folders = driveResource.folders || [];
+        // On-chain ABI: Drive -> files: vector<FileRecord>
+        const filesData = driveResource.files || [];
         const allFiles: FileItem[] = [];
 
-        folders.forEach((folder: any, folderIndex: number) => {
-          const filesData = folder.files || [];
-          filesData.forEach((file: any, fileIndex: number) => {
-            const contractName = hexOrBytesToString(file.name);
-            const contractBlobId = hexOrBytesToString(file.blob_id);
-            const extension = hexOrBytesToString(file.extension);
+        filesData.forEach((file: any) => {
+          const contractName = hexOrBytesToString(file.name);
+          const contractBlobId = hexOrBytesToString(file.shelby_blob_name ?? file.blob_id);
+          const mimeType = hexOrBytesToString(file.mime_type ?? file.extension);
 
-            // Intelligently pick display name
-            // If one has a timestamp prefix and the other doesn't, pick the one without
-            let displayName = contractName;
-            if (contractName && (contractName.match(/^\d{13}-/) || contractName.startsWith("shelby://"))) {
-              if (contractBlobId && !contractBlobId.match(/^\d{13}-/) && !contractBlobId.startsWith("shelby://")) {
-                displayName = contractBlobId;
-              }
-            } else if (!contractName && contractBlobId) {
-              displayName = contractBlobId;
-            }
-
-            allFiles.push({
-              id: folderIndex * 1000 + fileIndex,
-              display_name: displayName || "Untitled",
-              contract_name: contractName,
-              contract_blob_id: contractBlobId,
-              size: Number(file.size),
-              mime_type: extension || "application/octet-stream",
-              is_starred: false,
-              is_deleted: false,
-              folder_id: folderIndex,
-              file_index: fileIndex,
-              created_at: Number(file.created_at),
-              modified_at: Number(file.created_at),
-            });
+          allFiles.push({
+            id: Number(file.id),
+            display_name: contractName || "Untitled",
+            contract_name: contractName,
+            contract_blob_id: contractBlobId,
+            size: Number(file.size),
+            mime_type: mimeType || "application/octet-stream",
+            is_starred: Boolean(file.is_starred),
+            is_deleted: Boolean(file.is_deleted),
+            folder_id: Number(file.folder_id ?? 0),
+            created_at: Number(file.created_at),
+            modified_at: Number(file.modified_at ?? file.created_at),
           });
         });
 
@@ -175,12 +159,12 @@ export default function FileExplorer({ walletAddress, currentView = "my-drive", 
     if (!confirmed) return;
 
     try {
-      // On-chain ABI: delete_file_record(signer, folder_id, file_index)
+      // On-chain ABI: delete_file(signer, file_id)
       const tx: InputTransactionData = {
         data: {
-          function: `${MODULE_ADDRESS}::drive::delete_file_record`,
+          function: `${MODULE_ADDRESS}::drive::delete_file`,
           typeArguments: [],
-          functionArguments: [file.folder_id, file.file_index]
+          functionArguments: [file.id]
         }
       }
 

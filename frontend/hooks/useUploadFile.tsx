@@ -115,23 +115,19 @@ export const useUploadFile = (): UseUploadFileReturn => {
         console.log("✓ Uploaded to Shelby:", blobRegistrationName);
 
         // 5. Add file record to drive contract using SHORT NAME
-        // Old contract signature: add_file(signer, folder_id: u64, blob_id: vector<u8>, name: vector<u8>, size: u64, extension: vector<u8>, is_encrypted: bool)
+        // Current contract signature: add_file(signer, shelby_blob_name, name, size, mime_type, folder_id)
         console.log("⚙ Adding file record to drive...");
-
-        const extMatch = file.name.match(/\.([^.]+)$/);
-        const extension = extMatch ? extMatch[1] : "";
 
         const addFileTransaction: InputTransactionData = {
           data: {
             function: `${MODULE_ADDR}::drive::add_file`,
             typeArguments: [],
             functionArguments: [
-              0, // 1. folder_id - root folder
-              Array.from(new TextEncoder().encode(blobRegistrationName)), // 2. blob_id - ID for storage
-              Array.from(new TextEncoder().encode(file.name)),           // 3. name - display name
-              file.size,                                               // 4. size
-              Array.from(new TextEncoder().encode(extension)),           // 5. extension
-              false,                                                   // 6. is_encrypted
+              Array.from(new TextEncoder().encode(blobRegistrationName)),
+              Array.from(new TextEncoder().encode(file.name)),
+              file.size,
+              Array.from(new TextEncoder().encode(file.type || "application/octet-stream")),
+              folderId,
             ],
           },
         };

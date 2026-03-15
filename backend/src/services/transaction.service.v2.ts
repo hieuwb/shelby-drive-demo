@@ -8,9 +8,7 @@ export interface AddFileParams {
   name: string;
   blobId: string;
   size: number;
-  extension: string;
   mimeType: string;
-  isEncrypted: boolean;
 }
 
 export interface RenameFileParams {
@@ -70,13 +68,11 @@ export const buildAddFileTransaction = (params: AddFileParams) => {
       function: `${MODULE_ADDR}::${MODULE_NAME}::add_file`,
       typeArguments: [],
       functionArguments: [
-        params.folderId,
-        stringToHex(params.name),
         stringToHex(params.blobId),
+        stringToHex(params.name),
         params.size,
-        stringToHex(params.extension),
         stringToHex(params.mimeType),
-        params.isEncrypted,
+        params.folderId,
       ],
     },
   };

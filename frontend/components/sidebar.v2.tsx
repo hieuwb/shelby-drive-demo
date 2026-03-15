@@ -68,7 +68,6 @@ export default function Sidebar({
       const uploadResult = await uploadFile(file)
       console.log("✓ Upload success:", uploadResult)
 
-      const extension = file.name.split(".").pop() || ""
       const mimeType = file.type || "application/octet-stream"
 
       const txPayload = await buildAddFileTransaction({
@@ -76,9 +75,7 @@ export default function Sidebar({
         name: file.name,
         blobId: uploadResult.blobId,
         size: uploadResult.size,
-        extension,
         mimeType,
-        isEncrypted: false,
       })
 
       if (!signAndSubmitTransaction) {

@@ -1,14 +1,19 @@
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://77.42.24.95:3000"
+import type { InputGenerateTransactionPayloadData } from "@aptos-labs/ts-sdk"
 
-export interface TransactionPayload {
-  payload: {
-    function: string
-    typeArguments: string[]
-    functionArguments: any[]
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || ""
+
+function getApiBaseUrl(): string {
+  if (!API_BASE_URL) {
+    throw new Error("Missing NEXT_PUBLIC_API_BASE_URL (or NEXT_PUBLIC_API_URL)")
   }
+  return API_BASE_URL
 }
 
-export interface File {
+export interface TransactionPayload {
+  payload: InputGenerateTransactionPayloadData
+}
+
+export interface DriveFile {
   id: number
   name: string
   blobId: string
@@ -35,7 +40,7 @@ export interface Folder {
 }
 
 export interface Drive {
-  files: File[]
+  files: DriveFile[]
   folders: Folder[]
   totalSize: number
   storageLimit: number
@@ -45,39 +50,39 @@ export interface Drive {
 // ============ DRIVE DATA FETCHING ============
 
 export async function getDrive(address: string): Promise<Drive> {
-  const response = await fetch(`${API_BASE_URL}/api/drive/${address}`)
+  const response = await fetch(`${getApiBaseUrl()}/api/drive/${address}`)
   if (!response.ok) {
     throw new Error("Failed to fetch drive data")
   }
   return response.json()
 }
 
-export async function getFilesInFolder(address: string, folderId: number): Promise<File[]> {
-  const response = await fetch(`${API_BASE_URL}/api/drive/${address}/folder?folderId=${folderId}`)
+export async function getFilesInFolder(address: string, folderId: number): Promise<DriveFile[]> {
+  const response = await fetch(`${getApiBaseUrl()}/api/drive/${address}/folder?folderId=${folderId}`)
   if (!response.ok) {
     throw new Error("Failed to fetch folder files")
   }
   return response.json()
 }
 
-export async function getStarredFiles(address: string): Promise<File[]> {
-  const response = await fetch(`${API_BASE_URL}/api/drive/${address}/starred`)
+export async function getStarredFiles(address: string): Promise<DriveFile[]> {
+  const response = await fetch(`${getApiBaseUrl()}/api/drive/${address}/starred`)
   if (!response.ok) {
     throw new Error("Failed to fetch starred files")
   }
   return response.json()
 }
 
-export async function getTrashFiles(address: string): Promise<File[]> {
-  const response = await fetch(`${API_BASE_URL}/api/drive/${address}/trash`)
+export async function getTrashFiles(address: string): Promise<DriveFile[]> {
+  const response = await fetch(`${getApiBaseUrl()}/api/drive/${address}/trash`)
   if (!response.ok) {
     throw new Error("Failed to fetch trash files")
   }
   return response.json()
 }
 
-export async function getRecentFiles(address: string): Promise<File[]> {
-  const response = await fetch(`${API_BASE_URL}/api/drive/${address}/recent`)
+export async function getRecentFiles(address: string): Promise<DriveFile[]> {
+  const response = await fetch(`${getApiBaseUrl()}/api/drive/${address}/recent`)
   if (!response.ok) {
     throw new Error("Failed to fetch recent files")
   }
@@ -86,11 +91,11 @@ export async function getRecentFiles(address: string): Promise<File[]> {
 
 // ============ FILE UPLOAD/DOWNLOAD ============
 
-export async function uploadFile(file: File): Promise<{ blobId: string; size: number }> {
+export async function uploadFile(file: globalThis.File): Promise<{ blobId: string; size: number }> {
   const formData = new FormData()
   formData.append("file", file)
 
-  const response = await fetch(`${API_BASE_URL}/api/file/upload`, {
+  const response = await fetch(`${getApiBaseUrl()}/api/file/upload`, {
     method: "POST",
     body: formData,
   })
@@ -103,7 +108,7 @@ export async function uploadFile(file: File): Promise<{ blobId: string; size: nu
 }
 
 export async function downloadFileAs(blobId: string, fileName: string) {
-  const response = await fetch(`${API_BASE_URL}/api/file/download?blobId=${encodeURIComponent(blobId)}`)
+  const response = await fetch(`${getApiBaseUrl()}/api/file/download?blobId=${encodeURIComponent(blobId)}`)
   
   if (!response.ok) {
     throw new Error("Failed to download file")
@@ -127,11 +132,9 @@ export async function buildAddFileTransaction(params: {
   name: string
   blobId: string
   size: number
-  extension: string
   mimeType: string
-  isEncrypted: boolean
 }): Promise<TransactionPayload> {
-  const response = await fetch(`${API_BASE_URL}/api/drive/add-file`, {
+  const response = await fetch(`${getApiBaseUrl()}/api/drive/add-file`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(params),
@@ -148,7 +151,7 @@ export async function buildRenameFileTransaction(params: {
   fileId: number
   newName: string
 }): Promise<TransactionPayload> {
-  const response = await fetch(`${API_BASE_URL}/api/drive/rename`, {
+  const response = await fetch(`${getApiBaseUrl()}/api/drive/rename`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(params),
@@ -162,7 +165,7 @@ export async function buildRenameFileTransaction(params: {
 }
 
 export async function buildToggleStarTransaction(fileId: number): Promise<TransactionPayload> {
-  const response = await fetch(`${API_BASE_URL}/api/drive/toggle-star`, {
+  const response = await fetch(`${getApiBaseUrl()}/api/drive/toggle-star`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ fileId }),
@@ -176,7 +179,7 @@ export async function buildToggleStarTransaction(fileId: number): Promise<Transa
 }
 
 export async function buildMoveToTrashTransaction(fileId: number): Promise<TransactionPayload> {
-  const response = await fetch(`${API_BASE_URL}/api/drive/move-to-trash`, {
+  const response = await fetch(`${getApiBaseUrl()}/api/drive/move-to-trash`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ fileId }),
@@ -190,7 +193,7 @@ export async function buildMoveToTrashTransaction(fileId: number): Promise<Trans
 }
 
 export async function buildRestoreFromTrashTransaction(fileId: number): Promise<TransactionPayload> {
-  const response = await fetch(`${API_BASE_URL}/api/drive/restore`, {
+  const response = await fetch(`${getApiBaseUrl()}/api/drive/restore`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ fileId }),
@@ -204,7 +207,7 @@ export async function buildRestoreFromTrashTransaction(fileId: number): Promise<
 }
 
 export async function buildDeletePermanentlyTransaction(fileId: number): Promise<TransactionPayload> {
-  const response = await fetch(`${API_BASE_URL}/api/drive/delete-permanently`, {
+  const response = await fetch(`${getApiBaseUrl()}/api/drive/delete-permanently`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ fileId }),
@@ -221,7 +224,7 @@ export async function buildMoveFileTransaction(params: {
   fileId: number
   newFolderId: number
 }): Promise<TransactionPayload> {
-  const response = await fetch(`${API_BASE_URL}/api/drive/move-file`, {
+  const response = await fetch(`${getApiBaseUrl()}/api/drive/move-file`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(params),
@@ -238,7 +241,7 @@ export async function buildCreateFolderTransaction(params: {
   parentId: number
   name: string
 }): Promise<TransactionPayload> {
-  const response = await fetch(`${API_BASE_URL}/api/drive/create-folder`, {
+  const response = await fetch(`${getApiBaseUrl()}/api/drive/create-folder`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(params),
@@ -256,7 +259,7 @@ export async function buildShareDriveTransaction(params: {
   canEdit: boolean
   canDelete: boolean
 }): Promise<TransactionPayload> {
-  const response = await fetch(`${API_BASE_URL}/api/drive/share`, {
+  const response = await fetch(`${getApiBaseUrl()}/api/drive/share`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(params),
@@ -270,7 +273,7 @@ export async function buildShareDriveTransaction(params: {
 }
 
 export async function buildUnshareTransaction(sharedWith: string): Promise<TransactionPayload> {
-  const response = await fetch(`${API_BASE_URL}/api/drive/unshare`, {
+  const response = await fetch(`${getApiBaseUrl()}/api/drive/unshare`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ sharedWith }),

@@ -2,9 +2,16 @@ import { Request, Response } from "express";
 import * as driveService from "../services/drive.service.v2";
 import * as transactionService from "../services/transaction.service.v2";
 
+// Plan: normalize route/query primitives first, then call typed services only with validated strings/numbers.
+function getSingleString(value: string | string[] | undefined): string | undefined {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value) && value.length > 0) return value[0];
+  return undefined;
+}
+
 export async function getDriveController(req: Request, res: Response) {
   try {
-    const { address } = req.params;
+    const address = getSingleString(req.params.address);
     if (!address) {
       return res.status(400).json({ error: "Address is required" });
     }
@@ -19,14 +26,14 @@ export async function getDriveController(req: Request, res: Response) {
 
 export async function getFilesInFolderController(req: Request, res: Response) {
   try {
-    const { address } = req.params;
-    const { folderId } = req.query;
+    const address = getSingleString(req.params.address);
+    const folderIdRaw = getSingleString(req.query.folderId as string | string[] | undefined);
     
     if (!address) {
       return res.status(400).json({ error: "Address is required" });
     }
 
-    const files = await driveService.getFilesInFolder(address, Number(folderId) || 0);
+    const files = await driveService.getFilesInFolder(address, Number(folderIdRaw) || 0);
     res.json(files);
   } catch (error: any) {
     console.error("Error getting files in folder:", error);
@@ -36,7 +43,7 @@ export async function getFilesInFolderController(req: Request, res: Response) {
 
 export async function getStarredFilesController(req: Request, res: Response) {
   try {
-    const { address } = req.params;
+    const address = getSingleString(req.params.address);
     if (!address) {
       return res.status(400).json({ error: "Address is required" });
     }
@@ -51,7 +58,7 @@ export async function getStarredFilesController(req: Request, res: Response) {
 
 export async function getTrashFilesController(req: Request, res: Response) {
   try {
-    const { address } = req.params;
+    const address = getSingleString(req.params.address);
     if (!address) {
       return res.status(400).json({ error: "Address is required" });
     }
@@ -66,7 +73,7 @@ export async function getTrashFilesController(req: Request, res: Response) {
 
 export async function getRecentFilesController(req: Request, res: Response) {
   try {
-    const { address } = req.params;
+    const address = getSingleString(req.params.address);
     if (!address) {
       return res.status(400).json({ error: "Address is required" });
     }
@@ -81,9 +88,9 @@ export async function getRecentFilesController(req: Request, res: Response) {
 
 export async function addFileController(req: Request, res: Response) {
   try {
-    const { folderId, name, blobId, size, extension, mimeType, isEncrypted } = req.body;
+    const { folderId, name, blobId, size, mimeType } = req.body;
 
-    if (!name || !blobId || size === undefined) {
+    if (!name || !blobId || size === undefined || !mimeType) {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
@@ -92,9 +99,7 @@ export async function addFileController(req: Request, res: Response) {
       name,
       blobId,
       size,
-      extension: extension || "",
-      mimeType: mimeType || "application/octet-stream",
-      isEncrypted: isEncrypted || false,
+      mimeType,
     });
 
     res.json(txPayload);

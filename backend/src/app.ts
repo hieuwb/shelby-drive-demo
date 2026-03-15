@@ -1,6 +1,6 @@
 import express from "express";
 import cors from "cors";
-import driveRoute from "./routes/drive.route";
+import driveRouteV2 from "./routes/drive.route.v2";
 import fileRoute from "./routes/file.route";
 import shelbyRoute from "./routes/shelby.routes";
 
@@ -20,7 +20,7 @@ app.get("/", (req, res) => {
   });
 });
 
-app.use("/api/drive", driveRoute);
+app.use("/api/drive", driveRouteV2);
 app.use("/api/file", fileRoute);
 app.use("/api/shelby", shelbyRoute);
 

@@ -3,7 +3,14 @@
  * Handles all backend API calls
  */
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://77.42.24.95:3000';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || "";
+
+function getApiBaseUrl(): string {
+  if (!API_BASE_URL) {
+    throw new Error("Missing NEXT_PUBLIC_API_BASE_URL (or NEXT_PUBLIC_API_URL)");
+  }
+  return API_BASE_URL;
+}
 
 /**
  * API Response wrapper
@@ -22,7 +29,7 @@ async function apiRequest<T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const url = `${API_BASE_URL}${endpoint}`;
+  const url = `${getApiBaseUrl()}${endpoint}`;
   
   const response = await fetch(url, {
     ...options,
@@ -184,7 +191,7 @@ export async function uploadFile(file: File): Promise<UploadFileResponse> {
   const formData = new FormData();
   formData.append('file', file);
 
-  const response = await fetch(`${API_BASE_URL}/api/file/upload`, {
+  const response = await fetch(`${getApiBaseUrl()}/api/file/upload`, {
     method: 'POST',
     body: formData,
   });
@@ -203,7 +210,7 @@ export async function uploadFile(file: File): Promise<UploadFileResponse> {
 export async function downloadFile(blobId: string): Promise<Blob> {
   const encodedBlobId = encodeURIComponent(blobId);
   const response = await fetch(
-    `${API_BASE_URL}/api/file/download?blobId=${encodedBlobId}`
+    `${getApiBaseUrl()}/api/file/download?blobId=${encodedBlobId}`
   );
 
   if (!response.ok) {

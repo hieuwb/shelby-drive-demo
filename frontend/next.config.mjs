@@ -1,3 +1,10 @@
+// Normalize NODE_ENV for direct `next build` invocations in cached agent workspaces.
+// Some environments export NODE_ENV=development globally, which triggers unstable
+// prerender behavior in production builds (/_global-error useContext crash).
+if (process.argv.includes("build")) {
+  process.env.NODE_ENV = "production"
+}
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   typescript: {

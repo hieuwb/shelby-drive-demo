@@ -2,13 +2,25 @@
 
 import { useState } from "react"
 import { useWallet } from "@aptos-labs/wallet-adapter-react"
+import { WalletProvider } from "@/components/wallet-provider"
 import Header from "@/components/header"
 import Sidebar from "@/components/sidebar"
 import FileExplorer from "@/components/file-explorer"
 import WelcomeScreen from "@/components/welcome-screen"
 import { NetworkChecker } from "@/components/network-checker"
 
+// Plan: avoid static prerender for wallet-dependent UI to keep browser-only hooks off the server build path.
+export const dynamic = "force-dynamic"
+
 export default function DrivePage() {
+  return (
+    <WalletProvider>
+      <DrivePageInner />
+    </WalletProvider>
+  )
+}
+
+function DrivePageInner() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [currentView, setCurrentView] = useState("my-drive")
   const [refreshTrigger, setRefreshTrigger] = useState(0)

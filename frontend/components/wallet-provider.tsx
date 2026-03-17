@@ -17,7 +17,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           : undefined,
       }}
       onError={(error) => {
-        console.log("Wallet adapter error:", error)
+        console.error("Wallet adapter error:", error)
       }}
     >
       {children}

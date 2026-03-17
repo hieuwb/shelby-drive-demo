@@ -79,6 +79,9 @@ export const useUploadFile = (): UseUploadFileReturn => {
       if (!account) {
         throw new Error("Wallet not connected");
       }
+      if (!signAndSubmitTransaction) {
+        throw new Error("Wallet does not support signAndSubmitTransaction");
+      }
 
       setIsUploading(true);
       setError(null);
@@ -97,13 +100,20 @@ export const useUploadFile = (): UseUploadFileReturn => {
             throw new Error("INSUFFICIENT_BALANCE_FOR_TRANSACTION_FEE");
           }
         } catch (balanceError: any) {
-          if (String(balanceError?.message || "").includes("INSUFFICIENT_BALANCE")) {
+          const balanceMessage = String(balanceError?.message || "");
+          if (balanceMessage.includes("INSUFFICIENT_BALANCE")) {
             throw balanceError;
           }
-          console.warn("Balance pre-check failed, continuing:", balanceError?.message || balanceError);
+          if (
+            balanceMessage.toLowerCase().includes("account not found") ||
+            balanceMessage.toLowerCase().includes("resource_not_found")
+          ) {
+            throw new Error("ACCOUNT_NOT_ACTIVATED: Please fund this wallet on testnet and try again.");
+          }
+          throw new Error(`BALANCE_CHECK_FAILED: ${balanceMessage || "Unable to verify account balance."}`);
         }
 
-        const fileBuffer = Buffer.from(await file.arrayBuffer());
+        const fileBuffer = new Uint8Array(await file.arrayBuffer());
         const provider = await ClayErasureCodingProvider.create();
         const commitments = await generateCommitments(provider, fileBuffer);
 
@@ -129,7 +139,7 @@ export const useUploadFile = (): UseUploadFileReturn => {
         await getShelbyClient().rpc.putBlob({
           account: account.address,
           blobName: blobRegistrationName,
-          blobData: new Uint8Array(fileBuffer),
+          blobData: fileBuffer,
         });
 
         const addFileTransaction: InputTransactionData = {

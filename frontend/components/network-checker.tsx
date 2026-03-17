@@ -5,7 +5,7 @@ import { useEffect, useState } from "react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { AlertTriangle } from "lucide-react"
-import { SHELBY_NETWORK, SHELBY_NETWORK_LABEL } from "@/lib/shelby-client"
+import { SHELBY_NETWORK, SHELBY_NETWORK_LABEL, isExpectedWalletNetworkName } from "@/lib/shelby-client"
 
 const EXPECTED_LABEL = SHELBY_NETWORK_LABEL || "testnet"
 
@@ -16,33 +16,22 @@ export function NetworkChecker() {
 
     useEffect(() => {
         if (network?.name) {
-            const networkName = network.name.toLowerCase()
-            const accepted = new Set([EXPECTED_LABEL])
-            if (EXPECTED_LABEL === "testnet") {
-                accepted.add("aptos-testnet")
-                accepted.add("aptos testnet")
-            }
-            if (EXPECTED_LABEL === "shelbynet") {
-                // Petra may expose Shelbynet as custom
-                accepted.add("custom")
-            }
-            setWrongNetwork(!accepted.has(networkName))
+            setWrongNetwork(!isExpectedWalletNetworkName(network.name))
         } else {
             setWrongNetwork(false)
         }
-    }, [network])
+    }, [network?.name])
 
     const handleSwitchNetwork = async () => {
         try {
             setSwitching(true)
             if (changeNetwork) {
                 await changeNetwork(SHELBY_NETWORK)
-                setWrongNetwork(false)
             } else {
                 throw new Error("Network switching not supported")
             }
         } catch (error) {
-            console.warn("Auto-switch failed:", error)
+            console.error("Auto-switch failed:", error)
             const instructions = `Please switch network manually in your Petra wallet:\n\n1. Open Petra wallet extension\n2. Click the network dropdown (current: ${network?.name || "Unknown"})\n3. Select ${EXPECTED_LABEL}`
             alert(instructions)
         } finally {

@@ -9,6 +9,8 @@ const SHELBY_INDEXER = process.env.NEXT_PUBLIC_SHELBY_INDEXER;
 const SHELBY_FAUCET = process.env.NEXT_PUBLIC_SHELBY_FAUCET;
 const SHELBY_EXPLORER = process.env.NEXT_PUBLIC_SHELBY_EXPLORER;
 
+const normalizeNetworkName = (value: string): string => value.toLowerCase().trim().replace(/[\s_-]+/g, "");
+
 const DEFAULT_ENDPOINTS: Record<string, { fullnode: string; indexer: string; faucet: string; explorer: string }> = {
   testnet: {
     fullnode: "https://api.testnet.aptoslabs.com/v1",
@@ -29,7 +31,8 @@ const DEFAULT_ENDPOINTS: Record<string, { fullnode: string; indexer: string; fau
     explorer: "https://explorer.shelby.xyz/shelbynet",
   },
 };
-const NETWORK_ENDPOINTS = DEFAULT_ENDPOINTS[SHELBY_NETWORK_RAW] || DEFAULT_ENDPOINTS.testnet;
+const normalizedNetworkLabel = normalizeNetworkName(SHELBY_NETWORK_RAW);
+const NETWORK_ENDPOINTS = DEFAULT_ENDPOINTS[normalizedNetworkLabel] || DEFAULT_ENDPOINTS.testnet;
 
 if (!SHELBY_API_KEY) {
   console.warn("NEXT_PUBLIC_SHELBY_API_KEY not set");
@@ -37,7 +40,7 @@ if (!SHELBY_API_KEY) {
 
 // Plan: default app network to Aptos testnet while keeping explicit env overrides for Shelby-specific stages.
 const resolveNetwork = (name: string): Network => {
-  switch (name) {
+  switch (normalizeNetworkName(name)) {
     case "mainnet":
       return Network.MAINNET;
     case "testnet":
@@ -51,15 +54,34 @@ const resolveNetwork = (name: string): Network => {
   }
 };
 
-export const SHELBY_NETWORK = resolveNetwork(SHELBY_NETWORK_RAW);
-export const SHELBY_NETWORK_LABEL = SHELBY_NETWORK_RAW;
+export const SHELBY_NETWORK = resolveNetwork(normalizedNetworkLabel);
+export const SHELBY_NETWORK_LABEL = normalizedNetworkLabel;
 export const SHELBY_FULLNODE_URL = SHELBY_FULLNODE || NETWORK_ENDPOINTS.fullnode;
 export const SHELBY_INDEXER_URL = SHELBY_INDEXER || NETWORK_ENDPOINTS.indexer;
 export const SHELBY_FAUCET_URL = SHELBY_FAUCET || NETWORK_ENDPOINTS.faucet;
 export const SHELBY_EXPLORER_URL = SHELBY_EXPLORER || NETWORK_ENDPOINTS.explorer;
 
+const NETWORK_LABEL_ALIASES: Record<string, string[]> = {
+  mainnet: ["mainnet", "aptosmainnet"],
+  testnet: ["testnet", "aptostestnet", "shelbytestnet"],
+  devnet: ["devnet", "aptosdevnet"],
+  shelbynet: ["shelbynet", "shelbynetwork"],
+};
+
+const allowCustomWalletNetwork = Boolean(SHELBY_FULLNODE || SHELBY_INDEXER || SHELBY_FAUCET);
+
+export function isExpectedWalletNetworkName(networkName?: string | null): boolean {
+  if (!networkName) return false;
+  const normalized = normalizeNetworkName(networkName);
+  const accepted = new Set(NETWORK_LABEL_ALIASES[SHELBY_NETWORK_LABEL] || [SHELBY_NETWORK_LABEL]);
+  if (allowCustomWalletNetwork || SHELBY_NETWORK_LABEL === "shelbynet") {
+    accepted.add("custom");
+  }
+  return accepted.has(normalized);
+}
+
 const resolveShelbyStorageNetwork = (name: string): Network => {
-  switch (name) {
+  switch (normalizeNetworkName(name)) {
     case "local":
       return Network.LOCAL;
     case "shelbynet":

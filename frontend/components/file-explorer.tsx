@@ -9,29 +9,30 @@ import { useDownloadFile } from "@/hooks/useDownloadFile"
 import { getAptosClient } from "@/lib/shelby-client"
 import { MODULE_ADDRESS } from "@/abi/config"
 
-// Utility function to convert hex string or byte array to string
 function hexOrBytesToString(value: any): string {
   if (!value) return ""
-  if (typeof value === 'string') {
-    // It's a hex string like "0x7368656c62793a2f2f..."
-    const hex = value.startsWith('0x') ? value.slice(2) : value;
-    const bytes = [];
+
+  if (typeof value === "string") {
+    const hex = value.startsWith("0x") ? value.slice(2) : value
+    const bytes: number[] = []
     for (let i = 0; i < hex.length; i += 2) {
-      bytes.push(parseInt(hex.substr(i, 2), 16));
+      bytes.push(Number.parseInt(hex.slice(i, i + 2), 16))
     }
-    return new TextDecoder().decode(new Uint8Array(bytes));
-  } else if (Array.isArray(value)) {
-    // It's a byte array
-    return new TextDecoder().decode(new Uint8Array(value));
+    return new TextDecoder().decode(new Uint8Array(bytes))
   }
-  return String(value);
+
+  if (Array.isArray(value)) {
+    return new TextDecoder().decode(new Uint8Array(value))
+  }
+
+  return String(value)
 }
 
 interface FileItem {
   id: number
-  display_name: string // Derived name for display
-  contract_name: string // Raw name field from struct
-  contract_blob_id: string // Raw shelby_blob_name field from struct
+  display_name: string
+  contract_name: string
+  contract_blob_id: string
   size: number
   mime_type: string
   is_starred: boolean
@@ -51,154 +52,152 @@ export default function FileExplorer({ walletAddress, currentView = "my-drive", 
   const [files, setFiles] = useState<FileItem[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [loading, setLoading] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [hoveredFileId, setHoveredFileId] = useState<number | null>(null)
   const { signAndSubmitTransaction } = useWallet()
   const { downloadFile, isDownloading } = useDownloadFile()
 
   useEffect(() => {
     if (walletAddress) {
-      fetchFiles()
+      void fetchFiles()
     }
   }, [walletAddress, currentView, refreshTrigger])
 
   const fetchFiles = async () => {
-    if (!walletAddress) return;
+    if (!walletAddress) return
 
     setLoading(true)
+    setLoadError(null)
+
     try {
-      // Read Drive resource directly
-      try {
-        const driveResource = await getAptosClient().getAccountResource({
-          accountAddress: walletAddress,
-          resourceType: `${MODULE_ADDRESS}::drive::Drive`,
-        }) as any;
+      const driveResource = (await getAptosClient().getAccountResource({
+        accountAddress: walletAddress,
+        resourceType: `${MODULE_ADDRESS}::drive::Drive`,
+      })) as any
 
-        // On-chain ABI: Drive -> files: vector<FileRecord>
-        const filesData = driveResource.files || [];
-        const allFiles: FileItem[] = [];
+      const driveState = driveResource?.data ?? driveResource
+      const filesData = Array.isArray(driveState?.files) ? driveState.files : []
 
-        filesData.forEach((file: any) => {
-          const contractName = hexOrBytesToString(file.name);
-          const contractBlobId = hexOrBytesToString(file.shelby_blob_name ?? file.blob_id);
-          const mimeType = hexOrBytesToString(file.mime_type ?? file.extension);
+      const allFiles: FileItem[] = filesData.map((file: any) => {
+        const contractName = hexOrBytesToString(file.name)
+        const contractBlobId = hexOrBytesToString(file.shelby_blob_name ?? file.blob_id)
+        const mimeType = hexOrBytesToString(file.mime_type ?? file.extension)
 
-          allFiles.push({
-            id: Number(file.id),
-            display_name: contractName || "Untitled",
-            contract_name: contractName,
-            contract_blob_id: contractBlobId,
-            size: Number(file.size),
-            mime_type: mimeType || "application/octet-stream",
-            is_starred: Boolean(file.is_starred),
-            is_deleted: Boolean(file.is_deleted),
-            folder_id: Number(file.folder_id ?? 0),
-            created_at: Number(file.created_at),
-            modified_at: Number(file.modified_at ?? file.created_at),
-          });
-        });
-
-        console.log("✅ Files from blockchain:", allFiles);
-        setFiles(allFiles);
-      } catch (resourceError: any) {
-        if (resourceError.status === 404 || resourceError.message?.includes("not found")) {
-          console.log("⚠️ Drive not initialized, no files");
-          setFiles([]);
-        } else {
-          throw resourceError;
+        return {
+          id: Number(file.id),
+          display_name: contractName || "Untitled",
+          contract_name: contractName,
+          contract_blob_id: contractBlobId,
+          size: Number(file.size),
+          mime_type: mimeType || "application/octet-stream",
+          is_starred: Boolean(file.is_starred),
+          is_deleted: Boolean(file.is_deleted),
+          folder_id: Number(file.folder_id ?? 0),
+          created_at: Number(file.created_at),
+          modified_at: Number(file.modified_at ?? file.created_at),
         }
+      })
+
+      setFiles(allFiles)
+    } catch (error: any) {
+      if (error?.status === 404 || String(error?.message || "").includes("not found")) {
+        setFiles([])
+        setLoadError(null)
+      } else {
+        console.error("Error fetching files:", error)
+        setFiles([])
+        setLoadError(error?.message || "Failed to load files from blockchain.")
       }
-    } catch (error) {
-      console.error("Error fetching files:", error);
-      setFiles([]);
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
   const handleDownload = async (file: FileItem) => {
     try {
-      console.log("📥 Download trial for:", file.display_name);
-
-      // We pass both names to the hook, it will try them sequentially
-      await downloadFile(file.contract_blob_id, file.display_name, file.contract_name);
-
+      await downloadFile(file.contract_blob_id, file.display_name, file.contract_name)
     } catch (error: any) {
-      console.error("Download error:", error);
-      let errorMsg = "Download failed!";
+      console.error("Download error:", error)
+      let errorMsg = "Download failed."
       if (error?.message?.includes("404")) {
-        errorMsg = "❌ File not found on Shelby network.";
+        errorMsg = "File not found on Shelby network."
       } else if (error?.message) {
-        errorMsg = `❌ ${error.message}`;
+        errorMsg = error.message
       }
-      alert(errorMsg);
+      alert(errorMsg)
     }
-  };
+  }
 
   const handleShare = async (file: FileItem) => {
-    const shareUrl = `${window.location.origin}/shared/${walletAddress}/${file.id}`;
+    const shareUrl = `${window.location.origin}/shared/${walletAddress}/${file.id}`
     try {
       if (navigator.clipboard) {
-        await navigator.clipboard.writeText(shareUrl);
-        alert(`✅ Link copied!\n${shareUrl}`);
+        await navigator.clipboard.writeText(shareUrl)
+        alert(`Link copied.\n${shareUrl}`)
       } else {
-        prompt("Copy this link:", shareUrl);
+        prompt("Copy this link:", shareUrl)
       }
     } catch (error) {
-      console.error("Share error:", error);
-      prompt("Copy this link:", shareUrl);
+      console.error("Share error:", error)
+      prompt("Copy this link:", shareUrl)
     }
-  };
+  }
 
   const handleDelete = async (file: FileItem) => {
     if (!walletAddress) {
-      alert("Please connect wallet!");
-      return;
+      alert("Please connect wallet.")
+      return
+    }
+    if (!signAndSubmitTransaction) {
+      alert("Connected wallet does not support transaction signing.")
+      return
     }
 
-    const confirmed = confirm(`Are you sure you want to delete file "${file.display_name}"?`);
-    if (!confirmed) return;
+    const confirmed = confirm(`Are you sure you want to delete file "${file.display_name}"?`)
+    if (!confirmed) return
 
     try {
-      // On-chain ABI: delete_file(signer, file_id)
       const tx: InputTransactionData = {
         data: {
           function: `${MODULE_ADDRESS}::drive::delete_file`,
           typeArguments: [],
-          functionArguments: [file.id]
-        }
+          functionArguments: [file.id],
+        },
       }
 
-      if (signAndSubmitTransaction) {
-        const response = await signAndSubmitTransaction(tx);
-        await getAptosClient().waitForTransaction({ transactionHash: response.hash });
-        alert("✅ File deleted successfully!");
-        fetchFiles();
-      }
+      const response = await signAndSubmitTransaction(tx)
+      await getAptosClient().waitForTransaction({ transactionHash: response.hash })
+      alert("File deleted successfully.")
+      await fetchFiles()
     } catch (error: any) {
-      console.error("Delete error:", error);
-      alert("❌ Failed to delete file: " + error.message);
+      console.error("Delete error:", error)
+      alert(`Failed to delete file: ${error?.message || "Unknown error"}`)
     }
   }
 
-  const filteredFiles = files.filter(f =>
-    f.display_name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filesForView = files.filter((file) => {
+    if (currentView === "trash") return file.is_deleted
+    if (currentView === "starred") return !file.is_deleted && file.is_starred
+    return !file.is_deleted
+  })
+
+  const filteredFiles = filesForView.filter((file) =>
+    file.display_name.toLowerCase().includes(searchQuery.toLowerCase())
+  )
 
   const formatSize = (bytes: number) => {
     if (bytes === 0) return "0 B"
     const k = 1024
     const sizes = ["B", "KB", "MB", "GB", "TB"]
     const i = Math.floor(Math.log(bytes) / Math.log(k))
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
+    return `${Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`
   }
 
-  const formatDate = (timestamp: number) => {
-    return new Date(timestamp * 1000).toLocaleDateString()
-  }
+  const formatDate = (timestamp: number) => new Date(timestamp * 1000).toLocaleDateString()
 
   const getFileIcon = (mimeType: string) => {
-    if (mimeType.startsWith('image/')) return <ImageIcon className="w-8 h-8 text-blue-500" />
-    if (mimeType.includes('pdf')) return <FileText className="w-8 h-8 text-red-500" />
+    if (mimeType.startsWith("image/")) return <ImageIcon className="w-8 h-8 text-blue-500" />
+    if (mimeType.includes("pdf")) return <FileText className="w-8 h-8 text-red-500" />
     return <File className="w-8 h-8 text-indigo-500" />
   }
 
@@ -206,10 +205,15 @@ export default function FileExplorer({ walletAddress, currentView = "my-drive", 
     <div className="flex-1 flex flex-col min-h-0 bg-background p-6">
       <div className="flex items-center justify-between mb-8">
         <h2 className="text-2xl font-bold text-foreground">
-          {currentView === "my-drive" ? "My Drive" :
-            currentView === "recent" ? "Recent" :
-              currentView === "starred" ? "Starred" :
-                currentView === "trash" ? "Trash" : "Shared with me"}
+          {currentView === "my-drive"
+            ? "My Drive"
+            : currentView === "recent"
+            ? "Recent"
+            : currentView === "starred"
+            ? "Starred"
+            : currentView === "trash"
+            ? "Trash"
+            : "Shared with me"}
         </h2>
         <div className="relative w-96">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -226,7 +230,13 @@ export default function FileExplorer({ walletAddress, currentView = "my-drive", 
       <div className="flex-1 overflow-auto">
         {loading ? (
           <div className="flex items-center justify-center py-20">
-            <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+            <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : loadError ? (
+          <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
+            <Folder className="w-16 h-16 mb-4 opacity-20" />
+            <p className="text-lg">Unable to load files</p>
+            <p className="text-sm mt-2 text-center max-w-lg">{loadError}</p>
           </div>
         ) : filteredFiles.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">

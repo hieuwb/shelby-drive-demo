@@ -1,3 +1,3 @@
-declare module "@shelby-protocol/sdk/dist/node/index.mjs" {
+declare module "@shelby-protocol/sdk/node" {
   export const ShelbyNodeClient: any;
 }

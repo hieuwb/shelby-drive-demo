@@ -59,7 +59,7 @@ async function getShelbyClient(): Promise<any> {
 
   if (cachedClient && cachedClientKey === clientKey) return cachedClient;
 
-  const sdk = await import("@shelby-protocol/sdk/dist/node/index.mjs");
+  const sdk = await import("@shelby-protocol/sdk/node");
   const ShelbyNodeClient = (sdk as any).ShelbyNodeClient;
 
   cachedClient = new ShelbyNodeClient({

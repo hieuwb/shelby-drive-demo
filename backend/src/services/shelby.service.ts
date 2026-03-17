@@ -1,3 +1,5 @@
+/// <reference path="../types/shelby-sdk.d.ts" />
+
 import { Account, Ed25519PrivateKey, Network } from "@aptos-labs/ts-sdk";
 
 // SECURITY: load private key only from environment/secret manager. Never hardcode or commit private keys.
@@ -47,6 +49,12 @@ function getShelbyNetwork(): Network {
   return resolveShelbyStorageNetwork(shelbyStorageNetworkRaw);
 }
 
+// Keep a native dynamic import in CommonJS mode. TS can transpile `import()` to `require()`,
+// but this SDK only exposes an ESM `import` condition for `./node`.
+const dynamicImport = new Function("specifier", "return import(specifier);") as (
+  specifier: string,
+) => Promise<{ ShelbyNodeClient?: any }>;
+
 let cachedClient: any | null = null;
 let cachedClientKey: string | null = null;
 let cachedSigner: any | null = null;
@@ -59,8 +67,12 @@ async function getShelbyClient(): Promise<any> {
 
   if (cachedClient && cachedClientKey === clientKey) return cachedClient;
 
-  const sdk = await import("@shelby-protocol/sdk/node");
-  const ShelbyNodeClient = (sdk as any).ShelbyNodeClient;
+  const sdk = await dynamicImport("@shelby-protocol/sdk/node");
+  const ShelbyNodeClient = sdk.ShelbyNodeClient;
+
+  if (typeof ShelbyNodeClient !== "function") {
+    throw new Error("Shelby SDK node client export is unavailable");
+  }
 
   cachedClient = new ShelbyNodeClient({
     network,

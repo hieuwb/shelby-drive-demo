@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { AlertTriangle } from "lucide-react"
 import { SHELBY_NETWORK, SHELBY_NETWORK_LABEL } from "@/lib/shelby-client"
 
-const EXPECTED_LABEL = SHELBY_NETWORK_LABEL || "shelbynet"
+const EXPECTED_LABEL = SHELBY_NETWORK_LABEL || "testnet"
 
 export function NetworkChecker() {
     const { network, changeNetwork } = useWallet()
@@ -18,6 +18,10 @@ export function NetworkChecker() {
         if (network?.name) {
             const networkName = network.name.toLowerCase()
             const accepted = new Set([EXPECTED_LABEL])
+            if (EXPECTED_LABEL === "testnet") {
+                accepted.add("aptos-testnet")
+                accepted.add("aptos testnet")
+            }
             if (EXPECTED_LABEL === "shelbynet") {
                 // Petra may expose Shelbynet as custom
                 accepted.add("custom")

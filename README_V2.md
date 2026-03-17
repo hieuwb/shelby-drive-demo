@@ -3,7 +3,7 @@
 ## 🚀 Tổng quan
 
 Shelby Drive v2 là ứng dụng lưu trữ phi tập trung được xây dựng hoàn toàn mới với đầy đủ tính năng như Google Drive, sử dụng:
-- **Blockchain**: Aptos (Shelby testnet)
+- **Blockchain**: Aptos (testnet default, Shelbynet optional via env)
 - **Smart Contract**: Move language
 - **Off-chain Storage**: Walrus/Local backend
 - **Frontend**: Next.js 16 + React 19 + Aptos Wallet Adapter
@@ -165,7 +165,7 @@ Lưu lại MODULE_ADDR sau khi deploy thành công.
 Update `.env`:
 ```bash
 MODULE_ADDR=<địa_chỉ_module_vừa_deploy>
-APTOS_REST=https://api.shelbynet.shelby.xyz/v1
+APTOS_REST=https://api.testnet.aptoslabs.com/v1
 PORT=3000
 ```
 
@@ -265,7 +265,7 @@ npm run dev
 
 ## 📞 Support
 
-- Blockchain: Aptos Shelby testnet
+- Blockchain: Aptos testnet (default)
 - Smart Contract Language: Move
 - Frontend: Next.js 16 + React 19
 - Wallet: Aptos Wallet Adapter Standard

@@ -2,7 +2,8 @@ import { Account, Ed25519PrivateKey, Network } from "@aptos-labs/ts-sdk";
 
 const SHELBY_API_KEY = process.env.SHELBY_API_KEY;
 const SHELBY_ACCOUNT_PRIVATE_KEY = process.env.SHELBY_ACCOUNT_PRIVATE_KEY;
-const SHELBY_NETWORK_RAW = (process.env.SHELBY_NETWORK || "shelbynet").toLowerCase();
+const SHELBY_NETWORK_RAW = (process.env.SHELBY_NETWORK || "testnet").toLowerCase();
+const SHELBY_STORAGE_NETWORK_RAW = (process.env.SHELBY_STORAGE_NETWORK || SHELBY_NETWORK_RAW).toLowerCase();
 
 if (!SHELBY_API_KEY) {
   throw new Error("SHELBY_API_KEY not set in environment");
@@ -12,7 +13,8 @@ if (!SHELBY_ACCOUNT_PRIVATE_KEY) {
   throw new Error("SHELBY_ACCOUNT_PRIVATE_KEY not set in environment");
 }
 
-// Plan: load ESM-only Shelby SDK lazily and keep network selection env-driven for Shelby stage transitions.
+// SECURITY: load private key only from environment/secret manager. Never hardcode or commit private keys.
+// Plan: default backend Shelby client to testnet while preserving env-driven network overrides for Shelby stages.
 const resolveNetwork = (name: string): Network => {
   switch (name) {
     case "mainnet":
@@ -24,11 +26,25 @@ const resolveNetwork = (name: string): Network => {
     case "shelbynet":
       return Network.SHELBYNET;
     default:
-      return Network.SHELBYNET;
+      return Network.TESTNET;
   }
 };
 
-const SHELBY_NETWORK = resolveNetwork(SHELBY_NETWORK_RAW);
+const resolveShelbyStorageNetwork = (name: string): Network => {
+  switch (name) {
+    case "local":
+      return Network.LOCAL;
+    case "shelbynet":
+      return Network.SHELBYNET;
+    case "testnet":
+      // Shelby SDK currently supports LOCAL and SHELBYNET storage backends.
+      return Network.SHELBYNET;
+    default:
+      return resolveNetwork(name);
+  }
+};
+
+const SHELBY_NETWORK = resolveShelbyStorageNetwork(SHELBY_STORAGE_NETWORK_RAW);
 
 let cachedClient: any | null = null;
 

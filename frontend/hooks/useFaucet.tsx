@@ -2,9 +2,9 @@
 
 import { useWallet } from "@aptos-labs/wallet-adapter-react"
 import { useState } from "react"
-import { aptosClient } from "@/lib/shelby-client"
+import { aptosClient, SHELBY_FAUCET_URL } from "@/lib/shelby-client"
 
-const FAUCET_URL = "https://faucet.shelbynet.shelby.xyz"
+const FAUCET_URL = SHELBY_FAUCET_URL
 const FAUCET_AMOUNT = 100_000_000 // 1 APT in Octas
 
 export function useFaucet() {
@@ -22,41 +22,63 @@ export function useFaucet() {
         setError(null)
 
         try {
-            console.log(`🚰 Requesting ${type} faucet funds for:`, account.address)
+            console.log(`Requesting ${type} faucet funds for:`, account.address)
 
-            let endpoint = `${FAUCET_URL}/fund`;
-            let body: any = {
-                address: account.address,
-                amount: FAUCET_AMOUNT,
-            };
-
-            if (type === "shelbyusd") {
-                endpoint = `${FAUCET_URL}/shelbyusd`;
-                // Assume the same body structure for now
+            // Plan: prefer SDK faucet flow for Aptos testnet and keep HTTP fallback for Shelby faucet compatibility.
+            if (type === "apt") {
+                try {
+                    await aptosClient.fundAccount({
+                        accountAddress: account.address,
+                        amount: FAUCET_AMOUNT,
+                    })
+                    return true
+                } catch (sdkError: any) {
+                    console.warn("SDK faucet failed, falling back to direct endpoint:", sdkError?.message || sdkError)
+                }
             }
 
-            const response = await fetch(endpoint, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify(body),
-            })
+            const isAptosLabsFaucet = FAUCET_URL.includes("aptoslabs.com")
 
-            if (!response.ok) {
+            if (type === "shelbyusd" && isAptosLabsFaucet) {
+                throw new Error(
+                    "ShelbyUSD faucet is unavailable on Aptos public testnet faucet. Configure NEXT_PUBLIC_SHELBY_FAUCET to a Shelby faucet URL."
+                )
+            }
+
+            const endpointCandidates =
+                type === "apt"
+                    ? [`${FAUCET_URL}/fund`, `${FAUCET_URL}/mint?address=${account.address}&amount=${FAUCET_AMOUNT}`]
+                    : [`${FAUCET_URL}/shelbyusd`]
+
+            let lastError = "Faucet request failed"
+            for (const endpoint of endpointCandidates) {
+                const body = endpoint.includes("/mint?")
+                    ? undefined
+                    : JSON.stringify({
+                        address: account.address,
+                        amount: FAUCET_AMOUNT,
+                    })
+
+                const response = await fetch(endpoint, {
+                    method: "POST",
+                    headers: body ? { "Content-Type": "application/json" } : undefined,
+                    body,
+                })
+
+                if (response.ok) {
+                    const result = await response.json().catch(() => null)
+                    console.log(`${type} faucet request successful:`, result)
+                    await new Promise(resolve => setTimeout(resolve, 2000))
+                    return true
+                }
+
                 const errorText = await response.text()
-                throw new Error(`Faucet request failed: ${errorText}`)
+                lastError = `Faucet request failed (${endpoint}): ${errorText}`
             }
 
-            const result = await response.json()
-            console.log(`✅ ${type} faucet request successful:`, result)
-
-            // Wait a bit for the transaction to be processed
-            await new Promise(resolve => setTimeout(resolve, 2000))
-
-            return true
+            throw new Error(lastError)
         } catch (err: any) {
-            console.error(`❌ ${type} faucet error:`, err)
+            console.error(`${type} faucet error:`, err)
             setError(err.message || `Failed to request ${type} faucet funds`)
             return false
         } finally {

@@ -3,7 +3,7 @@
 ## 🚀 Overview
 
 Shelby Drive v2 is a decentralized storage application reimagined with full features similar to Google Drive, built on:
-- **Blockchain**: Aptos (Shelby testnet)
+- **Blockchain**: Aptos (testnet default, Shelbynet optional via env)
 - **Smart Contract**: Move language
 - **Off-chain Storage**: Walrus/Local backend
 - **Frontend**: Next.js 16 + React 19 + Aptos Wallet Adapter

@@ -11,19 +11,63 @@ import {
 import { getShelbyClient } from "@/lib/shelby-client";
 import { MODULE_ADDRESS as MODULE_ADDR } from "@/abi/config";
 
-
 interface UseUploadFileReturn {
   uploadFile: (file: File, folderId?: number) => Promise<void>;
   isUploading: boolean;
   error: string | null;
 }
 
+const MIN_APT_BALANCE_OCTAS = 1_000_000; // 0.01 APT
+const EXPIRATION_SECONDS_FROM_NOW = 600;
+const REGISTER_BLOB_MAX_GAS = 200_000;
+const ADD_FILE_MAX_GAS = 120_000;
+const MIN_GAS_UNIT_PRICE = 100;
+const MAX_GAS_UNIT_PRICE = 300;
+
+// Plan: cap gas/expiration options for wallet submissions so upload flow avoids false "insufficient gas" failures on testnet.
+async function getTransactionOptions(maxGasAmount: number) {
+  let gasUnitPrice = MIN_GAS_UNIT_PRICE;
+  try {
+    const estimation = await getShelbyClient().aptos.getGasPriceEstimation();
+    const estimate = Number(estimation?.gas_estimate || MIN_GAS_UNIT_PRICE);
+    gasUnitPrice = Math.min(Math.max(estimate, MIN_GAS_UNIT_PRICE), MAX_GAS_UNIT_PRICE);
+  } catch (error: any) {
+    console.warn("Failed to estimate gas price, using fallback:", error?.message || error);
+  }
+
+  return {
+    maxGasAmount,
+    gasUnitPrice,
+    expirationSecondsFromNow: EXPIRATION_SECONDS_FROM_NOW,
+  };
+}
+
+function normalizeUploadError(err: any): Error {
+  const rawMessage = String(err?.message || err?.toString() || "Upload failed");
+  const upper = rawMessage.toUpperCase();
+
+  if (upper.includes("TRANSACTION_EXPIRED")) {
+    return new Error(
+      "TRANSACTION_EXPIRED: Transaction expired before execution. Please sync device time and retry."
+    );
+  }
+
+  if (upper.includes("MODULE_NOT_FOUND") || upper.includes("FUNCTION_NOT_FOUND")) {
+    return new Error(
+      "MODULE_NOT_FOUND: Drive contract is not available on the active network. Verify module deployment/network config."
+    );
+  }
+
+  return new Error(rawMessage);
+}
+
 /**
  * Hook to upload file to Shelby network
  * Flow:
  * 1. Generate commitments for file
- * 2. Register blob on blockchain
- * 3. Upload actual data to Shelby RPC
+ * 2. Register blob on-chain
+ * 3. Upload data to Shelby RPC
+ * 4. Write metadata to Drive module
  */
 export const useUploadFile = (): UseUploadFileReturn => {
   const [isUploading, setIsUploading] = useState(false);
@@ -40,83 +84,53 @@ export const useUploadFile = (): UseUploadFileReturn => {
       setError(null);
 
       try {
-        console.log("=== START FILE UPLOAD ===");
-        console.log(`📝 File: ${file.name}, Size: ${file.size} bytes`);
         const address = account.address.toString();
-        console.log(`🔑 Account: ${address}`);
+        console.log("Starting upload:", { file: file.name, size: file.size, address });
 
-        // Check balance first
         try {
           const resources = await getShelbyClient().aptos.getAccountCoinsData({
             accountAddress: account.address,
           });
-          console.log("💰 Account coins:", resources);
 
-          const aptCoin = resources.find((coin) =>
-            coin.asset_type === "0x1::aptos_coin::AptosCoin"
-          );
-
-          if (!aptCoin || Number(aptCoin.amount) < 1000000) { // Less than 0.01 APT
-            throw new Error("INSUFFICIENT_BALANCE: Please use Faucet to get test APT");
+          const aptCoin = resources.find((coin) => coin.asset_type === "0x1::aptos_coin::AptosCoin");
+          if (!aptCoin || Number(aptCoin.amount) < MIN_APT_BALANCE_OCTAS) {
+            throw new Error("INSUFFICIENT_BALANCE_FOR_TRANSACTION_FEE");
           }
-
-          console.log(`✓ Balance: ${(Number(aptCoin.amount) / 100_000_000).toFixed(4)} APT`);
         } catch (balanceError: any) {
-          if (balanceError.message?.includes("INSUFFICIENT_BALANCE")) {
+          if (String(balanceError?.message || "").includes("INSUFFICIENT_BALANCE")) {
             throw balanceError;
           }
-          console.warn("⚠️ Could not check balance:", balanceError.message);
-          // Continue anyway - might be account not found, which faucet will fix
+          console.warn("Balance pre-check failed, continuing:", balanceError?.message || balanceError);
         }
 
-        // 1. Generate commitments
         const fileBuffer = Buffer.from(await file.arrayBuffer());
         const provider = await ClayErasureCodingProvider.create();
         const commitments = await generateCommitments(provider, fileBuffer);
 
-        console.log("✓ Generated commitments:", commitments.blob_merkle_root);
+        const blobRegistrationName = `${Date.now()}-${file.name}`;
 
-        // 2. Create blob name
-        // - Short name for storing in contract: timestamp-filename
-        // - Full name for Shelby network: shelby://account/timestamp-filename
-        const timestamp = Date.now();
-        const shortBlobName = `${timestamp}-${file.name}`;
-        // Standard: Registration name is just the path/name, account namespace is handled by API
-        const blobRegistrationName = shortBlobName;
-
-        // 3. Register blob on blockchain using BARE NAME
-        const payload = ShelbyBlobClient.createRegisterBlobPayload({
-          account: account.address, // directly from account for correct type
+        const registerPayload = ShelbyBlobClient.createRegisterBlobPayload({
+          account: account.address,
           blobName: blobRegistrationName,
           blobMerkleRoot: commitments.blob_merkle_root,
           numChunksets: expectedTotalChunksets(commitments.raw_data_size),
-          expirationMicros: (Date.now() + 30 * 24 * 60 * 60 * 1000) * 1000, // 30 days
+          expirationMicros: (Date.now() + 30 * 24 * 60 * 60 * 1000) * 1000,
           blobSize: commitments.raw_data_size,
         });
 
-        console.log("⚙ Submitting blockchain transaction for:", blobRegistrationName);
-        const txResult = await signAndSubmitTransaction({ data: payload });
-        console.log("✓ Transaction submitted:", txResult.hash);
-
-        // Wait for transaction confirmation
-        await getShelbyClient().aptos.waitForTransaction({
-          transactionHash: txResult.hash,
+        const registerBlobTx = await signAndSubmitTransaction({
+          data: registerPayload,
+          options: await getTransactionOptions(REGISTER_BLOB_MAX_GAS),
         });
-        console.log("✓ Transaction confirmed");
+        await getShelbyClient().aptos.waitForTransaction({
+          transactionHash: registerBlobTx.hash,
+        });
 
-        // 4. Upload to Shelby RPC using BARE NAME
-        console.log("⚙ Uploading to Shelby network...");
         await getShelbyClient().rpc.putBlob({
           account: account.address,
           blobName: blobRegistrationName,
           blobData: new Uint8Array(fileBuffer),
         });
-
-        console.log("✓ Uploaded to Shelby:", blobRegistrationName);
-
-        // 5. Add file record to drive contract using SHORT NAME
-        // Current contract signature: add_file(signer, shelby_blob_name, name, size, mime_type, folder_id)
-        console.log("⚙ Adding file record to drive...");
 
         const addFileTransaction: InputTransactionData = {
           data: {
@@ -130,32 +144,18 @@ export const useUploadFile = (): UseUploadFileReturn => {
               folderId,
             ],
           },
+          options: await getTransactionOptions(ADD_FILE_MAX_GAS),
         };
 
-        const addFileResult = await signAndSubmitTransaction(addFileTransaction);
-        console.log("✅ File record added:", addFileResult.hash);
-
-        // Wait for transaction confirmation
+        const addFileTx = await signAndSubmitTransaction(addFileTransaction);
         await getShelbyClient().aptos.waitForTransaction({
-          transactionHash: addFileResult.hash,
+          transactionHash: addFileTx.hash,
         });
-        console.log("✅ Upload complete!");
-
       } catch (err: any) {
-        console.error("❌ Upload error details:", err);
-        const errorMessage = err?.message || err?.toString() || "Upload failed";
-        console.error("❌ Error message:", errorMessage);
-
-        // Log specific error details
-        if (err?.response) {
-          console.error("❌ Response error:", err.response);
-        }
-        if (err?.code) {
-          console.error("❌ Error code:", err.code);
-        }
-
-        setError(errorMessage);
-        throw err;
+        const normalized = normalizeUploadError(err);
+        console.error("Upload failed:", normalized.message, err);
+        setError(normalized.message);
+        throw normalized;
       } finally {
         setIsUploading(false);
       }

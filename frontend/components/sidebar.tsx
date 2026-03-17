@@ -2,11 +2,10 @@
 
 import React from "react"
 import { useWallet } from "@aptos-labs/wallet-adapter-react"
-import { Upload, HardDrive, Share2, Trash2, Menu, X } from "lucide-react"
+import { Upload, HardDrive, Share2, Menu, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useState } from "react"
 import { useUploadFile } from "@/hooks/useUploadFile"
-import { WalletInfo } from "@/components/wallet-info"
 
 interface SidebarProps {
   isOpen: boolean
@@ -15,19 +14,37 @@ interface SidebarProps {
   onUploadSuccess?: () => void
 }
 
-export default function Sidebar({ isOpen, onToggle, onNavigationChange, onUploadSuccess }: SidebarProps) {
-  const [selectedNav, setSelectedNav] = useState("my-drive")
+function mapUploadError(error: any): string {
+  const primary = String(error?.message || "Unknown error")
+  const secondary = String(error?.data?.message || "")
+  const normalized = `${primary} ${secondary}`.toUpperCase()
 
-  const handleNavClick = (nav: string) => {
-    setSelectedNav(nav)
-    if (onNavigationChange) {
-      onNavigationChange(nav)
-    }
+  if (normalized.includes("TRANSACTION_EXPIRED")) {
+    return "Transaction expired before execution. Please sync device time and retry."
+  }
+  if (normalized.includes("MODULE_NOT_FOUND") || normalized.includes("FUNCTION_NOT_FOUND")) {
+    return "Drive contract is unavailable on the current network. Please verify deployment/network config."
+  }
+  if (normalized.includes("INSUFFICIENT_BALANCE_FOR_TRANSACTION_FEE") || normalized.includes("INSUFFICIENT_BALANCE")) {
+    return "Insufficient gas fee. Please use Faucet to get more APT."
+  }
+  if (normalized.includes("ACCOUNT_NOT_FOUND")) {
+    return "Account not activated. Please use Faucet to initialize the account."
   }
 
+  return primary
+}
+
+export default function Sidebar({ isOpen, onToggle, onNavigationChange, onUploadSuccess }: SidebarProps) {
+  const [selectedNav, setSelectedNav] = useState("my-drive")
   const { account } = useWallet()
   const { uploadFile, isUploading } = useUploadFile()
   const fileInputRef = React.useRef<HTMLInputElement>(null)
+
+  const handleNavClick = (nav: string) => {
+    setSelectedNav(nav)
+    onNavigationChange?.(nav)
+  }
 
   const handleUploadClick = () => {
     fileInputRef.current?.click()
@@ -38,41 +55,26 @@ export default function Sidebar({ isOpen, onToggle, onNavigationChange, onUpload
     if (!file) return
 
     if (!account?.address) {
-      alert("Please connect wallet before uploading!")
+      alert("Please connect wallet before uploading.")
       return
     }
 
     try {
-      console.log("📤 Starting upload for:", file.name);
       await uploadFile(file, 0)
-      alert(`✅ Upload success: ${file.name}`)
-
-      // Trigger refresh in FileExplorer
+      alert(`Upload success: ${file.name}`)
       onUploadSuccess?.()
 
-      // Clear input
       if (fileInputRef.current) {
         fileInputRef.current.value = ""
       }
     } catch (error: any) {
-      console.error("❌ Upload failed:", error)
-
-      // Show more detailed error message
-      let errorMsg = error?.message || "Unknown error";
-
-      if (errorMsg.includes("INSUFFICIENT_BALANCE")) {
-        errorMsg = "Insufficient gas fee! Please use Faucet to get APT.";
-      } else if (errorMsg.includes("account not found")) {
-        errorMsg = "Account not activated! Please use Faucet to get APT.";
-      }
-
-      alert(`❌ Upload failed: ${errorMsg}`)
+      console.error("Upload failed:", error)
+      alert(`Upload failed: ${mapUploadError(error)}`)
     }
   }
 
   return (
     <>
-      {/* Mobile Toggle */}
       <button
         onClick={onToggle}
         className="fixed top-20 left-4 z-40 lg:hidden bg-card p-2 rounded-lg border border-border"
@@ -80,7 +82,6 @@ export default function Sidebar({ isOpen, onToggle, onNavigationChange, onUpload
         {isOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
       </button>
 
-      {/* Sidebar */}
       <aside
         className={`${isOpen ? "w-64" : "w-0"
           } bg-sidebar border-r border-sidebar-border transition-all duration-300 flex flex-col overflow-hidden lg:relative fixed lg:w-64 h-[calc(100vh-64px)] z-30`}
@@ -110,20 +111,10 @@ export default function Sidebar({ isOpen, onToggle, onNavigationChange, onUpload
               isSelected={selectedNav === "shared"}
               onClick={() => handleNavClick("shared")}
             />
-            {/* Trash disabled - old contract doesn't support it */}
-            {/* 
-            <NavItem
-              icon={<Trash2 className="w-5 h-5" />}
-              label="Trash"
-              isSelected={selectedNav === "trash"}
-              onClick={() => handleNavClick("trash")}
-            />
-            */}
           </nav>
         </div>
       </aside>
 
-      {/* Overlay for mobile */}
       {isOpen && <div className="fixed inset-0 bg-black/50 z-20 lg:hidden" onClick={onToggle} />}
     </>
   )

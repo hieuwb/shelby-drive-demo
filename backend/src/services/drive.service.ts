@@ -1,4 +1,4 @@
-import { aptos } from "./aptos.service";
+import { getAptosClient } from "./aptos.service";
 import { hexToString } from "../utils/hex";
 
 interface RawFile {
@@ -79,6 +79,7 @@ function formatDrive(rawDrive: RawDrive): FormattedDrive {
 
 export async function getDrive(account: string): Promise<FormattedDrive> {
   const moduleAddr = process.env.MODULE_ADDR;
+  const aptos = getAptosClient();
   
   if (!moduleAddr) {
     throw new Error("MODULE_ADDR environment variable is not set");

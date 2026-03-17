@@ -1,4 +1,4 @@
-import { aptos } from "./aptos.service";
+import { getAptosClient } from "./aptos.service";
 import { hexToString } from "../utils/hex";
 
 interface RawFileRecord {
@@ -107,6 +107,7 @@ function formatFolder(rawFolder: RawFolder): FormattedFolder {
 
 export async function getDrive(account: string): Promise<FormattedDrive> {
   try {
+    const aptos = getAptosClient();
     const MODULE_ADDR = process.env.MODULE_ADDR;
     const MODULE_NAME = "drive";
 
@@ -158,6 +159,7 @@ export async function getDrive(account: string): Promise<FormattedDrive> {
 
 export async function getFilesInFolder(account: string, folderId: number): Promise<FormattedFile[]> {
   try {
+    const aptos = getAptosClient();
     const MODULE_ADDR = process.env.MODULE_ADDR;
     const MODULE_NAME = "drive";
 
@@ -183,6 +185,7 @@ export async function getFilesInFolder(account: string, folderId: number): Promi
 
 export async function getStarredFiles(account: string): Promise<FormattedFile[]> {
   try {
+    const aptos = getAptosClient();
     const MODULE_ADDR = process.env.MODULE_ADDR;
     const MODULE_NAME = "drive";
 
@@ -208,6 +211,7 @@ export async function getStarredFiles(account: string): Promise<FormattedFile[]>
 
 export async function getTrashFiles(account: string): Promise<FormattedFile[]> {
   try {
+    const aptos = getAptosClient();
     const MODULE_ADDR = process.env.MODULE_ADDR;
     const MODULE_NAME = "drive";
 
@@ -233,6 +237,7 @@ export async function getTrashFiles(account: string): Promise<FormattedFile[]> {
 
 export async function getRecentFiles(account: string): Promise<FormattedFile[]> {
   try {
+    const aptos = getAptosClient();
     const MODULE_ADDR = process.env.MODULE_ADDR;
     const MODULE_NAME = "drive";
 

@@ -1,18 +1,5 @@
 import { Account, Ed25519PrivateKey, Network } from "@aptos-labs/ts-sdk";
 
-const SHELBY_API_KEY = process.env.SHELBY_API_KEY;
-const SHELBY_ACCOUNT_PRIVATE_KEY = process.env.SHELBY_ACCOUNT_PRIVATE_KEY;
-const SHELBY_NETWORK_RAW = (process.env.SHELBY_NETWORK || "testnet").toLowerCase();
-const SHELBY_STORAGE_NETWORK_RAW = (process.env.SHELBY_STORAGE_NETWORK || SHELBY_NETWORK_RAW).toLowerCase();
-
-if (!SHELBY_API_KEY) {
-  throw new Error("SHELBY_API_KEY not set in environment");
-}
-
-if (!SHELBY_ACCOUNT_PRIVATE_KEY) {
-  throw new Error("SHELBY_ACCOUNT_PRIVATE_KEY not set in environment");
-}
-
 // SECURITY: load private key only from environment/secret manager. Never hardcode or commit private keys.
 // Plan: default backend Shelby client to testnet while preserving env-driven network overrides for Shelby stages.
 const resolveNetwork = (name: string): Network => {
@@ -44,27 +31,60 @@ const resolveShelbyStorageNetwork = (name: string): Network => {
   }
 };
 
-const SHELBY_NETWORK = resolveShelbyStorageNetwork(SHELBY_STORAGE_NETWORK_RAW);
+function getRequiredEnv(name: "SHELBY_API_KEY" | "SHELBY_ACCOUNT_PRIVATE_KEY"): string {
+  const value = process.env[name];
+
+  if (!value) {
+    throw new Error(`${name} not set in environment`);
+  }
+
+  return value;
+}
+
+function getShelbyNetwork(): Network {
+  const shelbyNetworkRaw = (process.env.SHELBY_NETWORK || "testnet").toLowerCase();
+  const shelbyStorageNetworkRaw = (process.env.SHELBY_STORAGE_NETWORK || shelbyNetworkRaw).toLowerCase();
+  return resolveShelbyStorageNetwork(shelbyStorageNetworkRaw);
+}
 
 let cachedClient: any | null = null;
+let cachedClientKey: string | null = null;
+let cachedSigner: any | null = null;
+let cachedSignerKey: string | null = null;
 
 async function getShelbyClient(): Promise<any> {
-  if (cachedClient) return cachedClient;
+  const apiKey = getRequiredEnv("SHELBY_API_KEY");
+  const network = getShelbyNetwork();
+  const clientKey = `${network}:${apiKey}`;
+
+  if (cachedClient && cachedClientKey === clientKey) return cachedClient;
 
   const sdk = await import("@shelby-protocol/sdk/dist/node/index.mjs");
   const ShelbyNodeClient = (sdk as any).ShelbyNodeClient;
 
   cachedClient = new ShelbyNodeClient({
-    network: SHELBY_NETWORK,
-    apiKey: SHELBY_API_KEY,
+    network,
+    apiKey,
   });
+  cachedClientKey = clientKey;
 
   return cachedClient;
 }
 
-const signer: any = Account.fromPrivateKey({
-  privateKey: new Ed25519PrivateKey(SHELBY_ACCOUNT_PRIVATE_KEY),
-});
+function getSigner(): any {
+  const privateKey = getRequiredEnv("SHELBY_ACCOUNT_PRIVATE_KEY");
+
+  if (cachedSigner && cachedSignerKey === privateKey) {
+    return cachedSigner;
+  }
+
+  cachedSigner = Account.fromPrivateKey({
+    privateKey: new Ed25519PrivateKey(privateKey),
+  });
+  cachedSignerKey = privateKey;
+
+  return cachedSigner;
+}
 
 export interface UploadToShelbyParams {
   fileBuffer: Buffer;
@@ -84,6 +104,7 @@ export interface DownloadFromShelbyParams {
 export async function uploadToShelby(params: UploadToShelbyParams): Promise<string> {
   const { fileBuffer, fileName, accountAddress } = params;
   const client = await getShelbyClient();
+  const signer = getSigner();
 
   const blobName = `${accountAddress}/${fileName}`;
   const expirationMicros = Date.now() * 1000 + (30 * 24 * 60 * 60 * 1_000_000);

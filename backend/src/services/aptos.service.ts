@@ -1,18 +1,31 @@
 import "dotenv/config";
 import { Aptos, AptosConfig, Network } from "@aptos-labs/ts-sdk";
 
-const aptosRestUrl = process.env.APTOS_REST;
+let cachedAptos: Aptos | null = null;
 
-if (!aptosRestUrl) {
-  throw new Error(
-    "APTOS_REST environment variable is required. Please set it in your .env file.\n" +
-    "Example: APTOS_REST=https://fullnode.testnet.aptoslabs.com/v1"
-  );
+function getAptosRestUrl(): string {
+  const aptosRestUrl = process.env.APTOS_REST;
+
+  if (!aptosRestUrl) {
+    throw new Error(
+      "APTOS_REST environment variable is required. Please set it in your .env file.\n" +
+      "Example: APTOS_REST=https://fullnode.testnet.aptoslabs.com/v1"
+    );
+  }
+
+  return aptosRestUrl;
 }
 
-const config = new AptosConfig({
-  network: Network.CUSTOM,
-  fullnode: aptosRestUrl,
-});
+export function getAptosClient(): Aptos {
+  if (cachedAptos) {
+    return cachedAptos;
+  }
 
-export const aptos = new Aptos(config);
+  const config = new AptosConfig({
+    network: Network.CUSTOM,
+    fullnode: getAptosRestUrl(),
+  });
+
+  cachedAptos = new Aptos(config);
+  return cachedAptos;
+}

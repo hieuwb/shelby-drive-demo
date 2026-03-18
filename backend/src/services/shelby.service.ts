@@ -4,8 +4,10 @@ import { Account, Ed25519PrivateKey, Network } from "@aptos-labs/ts-sdk";
 
 // SECURITY: load private key only from environment/secret manager. Never hardcode or commit private keys.
 // Plan: default backend Shelby client to testnet while preserving env-driven network overrides for Shelby stages.
+const normalizeNetworkName = (name: string): string => name.toLowerCase().trim().replace(/[\s_-]+/g, "");
+
 const resolveNetwork = (name: string): Network => {
-  switch (name) {
+  switch (normalizeNetworkName(name)) {
     case "mainnet":
       return Network.MAINNET;
     case "testnet":
@@ -20,17 +22,29 @@ const resolveNetwork = (name: string): Network => {
 };
 
 const resolveShelbyStorageNetwork = (name: string): Network => {
-  switch (name) {
+  switch (normalizeNetworkName(name)) {
     case "local":
       return Network.LOCAL;
     case "shelbynet":
       return Network.SHELBYNET;
     case "testnet":
-      // Shelby SDK currently supports LOCAL and SHELBYNET storage backends.
-      return Network.SHELBYNET;
+      return Network.TESTNET;
+    case "devnet":
+      // Shelby storage currently uses testnet-grade RPC endpoints for devnet deployments.
+      return Network.TESTNET;
     default:
       return resolveNetwork(name);
   }
+};
+
+const sanitizeEnvValue = (value: string): string => value.trim().replace(/^['\"]|['\"]$/g, "");
+
+const normalizePrivateKey = (value: string): string => {
+  const sanitized = sanitizeEnvValue(value);
+  if (sanitized.startsWith("ed25519-priv-")) {
+    return sanitized.slice("ed25519-priv-".length);
+  }
+  return sanitized;
 };
 
 function getRequiredEnv(name: "SHELBY_API_KEY" | "SHELBY_ACCOUNT_PRIVATE_KEY"): string {
@@ -40,7 +54,7 @@ function getRequiredEnv(name: "SHELBY_API_KEY" | "SHELBY_ACCOUNT_PRIVATE_KEY"): 
     throw new Error(`${name} not set in environment`);
   }
 
-  return value;
+  return sanitizeEnvValue(value);
 }
 
 function getShelbyNetwork(): Network {
@@ -85,15 +99,16 @@ async function getShelbyClient(): Promise<any> {
 
 function getSigner(): any {
   const privateKey = getRequiredEnv("SHELBY_ACCOUNT_PRIVATE_KEY");
+  const normalizedPrivateKey = normalizePrivateKey(privateKey);
 
-  if (cachedSigner && cachedSignerKey === privateKey) {
+  if (cachedSigner && cachedSignerKey === normalizedPrivateKey) {
     return cachedSigner;
   }
 
   cachedSigner = Account.fromPrivateKey({
-    privateKey: new Ed25519PrivateKey(privateKey),
+    privateKey: new Ed25519PrivateKey(normalizedPrivateKey),
   });
-  cachedSignerKey = privateKey;
+  cachedSignerKey = normalizedPrivateKey;
 
   return cachedSigner;
 }

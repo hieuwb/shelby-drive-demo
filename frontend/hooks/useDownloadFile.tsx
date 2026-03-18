@@ -10,8 +10,74 @@ interface UseDownloadFileReturn {
   error: string | null;
 }
 
+function normalizeDownloadError(err: unknown): Error {
+  const raw = String((err as any)?.message || err || "Download failed");
+  const lower = raw.toLowerCase();
+
+  if (lower.includes("not found") || lower.includes("404")) {
+    return new Error("FILE_NOT_FOUND: The requested file was not found on Shelby.");
+  }
+
+  if (
+    lower.includes("expired") ||
+    lower.includes("invalid blob") ||
+    lower.includes("incompatible identifier")
+  ) {
+    return new Error("BLOB_UNAVAILABLE: The blob identifier is invalid or has already expired.");
+  }
+
+  return new Error(raw);
+}
+
+function buildBlobCandidates(
+  address: string,
+  primary?: string,
+  secondary?: string
+): string[] {
+  const normalize = (value?: string) => (value || "").trim();
+  const maybePrefix = (value: string) =>
+    value.startsWith("shelby://") ? value : `shelby://${address}/${value}`;
+
+  const base = [normalize(primary), normalize(secondary)].filter(Boolean);
+  const expanded = [...base, ...base.map((item) => maybePrefix(item))];
+  return Array.from(new Set(expanded));
+}
+
+async function saveBlobToDisk(blob: any, fileName: string): Promise<void> {
+  const reader = blob.readable.getReader();
+  const chunks: Uint8Array[] = [];
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+  const fileData = new Uint8Array(totalLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    fileData.set(chunk, offset);
+    offset += chunk.length;
+  }
+
+  const fileBlob = new Blob([fileData]);
+  const url = URL.createObjectURL(fileBlob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileName || "download";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 /**
- * Hook to download file from Shelby network with robust trial system
+ * Hook to download file from Shelby network with fallback blob-id candidates.
  */
 export const useDownloadFile = (): UseDownloadFileReturn => {
   const [isDownloading, setIsDownloading] = useState(false);
@@ -27,96 +93,29 @@ export const useDownloadFile = (): UseDownloadFileReturn => {
       setIsDownloading(true);
       setError(null);
 
-      // Clean address string
-      const addrStr = account.address.toString();
-
-      const tryDownload = async (id: string, useFullPrefix: boolean): Promise<boolean> => {
-        if (!id || id === "undefined" || id === "") return false;
-
-        try {
-          // Robust path construction
-          // Standard is bare ID, but some SDK versions or manual trials might want shelby://account/ prefix
-          const targetId = useFullPrefix && !id.startsWith("shelby://")
-            ? `shelby://${addrStr}/${id}`
-            : id;
-
-          console.log(`📥 Downloading ${targetId}...`);
-
-          const blob = await getShelbyClient().download({
-            account: account.address,
-            blobName: targetId,
-          });
-
-          console.log("✅ Download trial success!");
-          await processDownload(blob, fileName || id);
-          return true;
-        } catch (err: any) {
-          console.warn(`⚠️ Trial failed for ${id} (prefix=${useFullPrefix}):`, err.message);
-          return false;
-        }
-      };
-
-      const processDownload = async (blob: any, name: string) => {
-        const reader = blob.readable.getReader();
-        const chunks: Uint8Array[] = [];
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          chunks.push(value);
-        }
-        const totalLength = chunks.reduce((acc, chunk) => acc + chunk.length, 0);
-        const fileData = new Uint8Array(totalLength);
-        let offset = 0;
-        for (const chunk of chunks) {
-          fileData.set(chunk, offset);
-          offset += chunk.length;
-        }
-        const fileBlob = new Blob([fileData]);
-        const url = URL.createObjectURL(fileBlob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = name || "download";
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-      };
+      const accountAddress = account.address.toString();
+      const candidates = buildBlobCandidates(accountAddress, blobName, altBlobName);
+      let lastError: unknown = null;
 
       try {
-        console.log("📥 ===== ROBUST DOWNLOAD SYSTEM START =====");
-
-        // Trial 1: Raw contract blob_id (Standard for new version)
-        console.log("🔍 Trial 1: Raw blob_id...");
-        let success = await tryDownload(blobName, false);
-
-        // Trial 2: Full prefixed blob_id (Just in case)
-        if (!success) {
-          console.log("🔄 Trial 2: Prefixed blob_id...");
-          success = await tryDownload(blobName, true);
+        for (const candidate of candidates) {
+          try {
+            const blob = await getShelbyClient().download({
+              account: account.address,
+              blobName: candidate,
+            });
+            await saveBlobToDisk(blob, fileName || candidate);
+            return;
+          } catch (attemptError) {
+            lastError = attemptError;
+          }
         }
 
-        // Trial 3: Raw contract name (Recovery for swapped fields)
-        if (!success && altBlobName && altBlobName !== blobName) {
-          console.log("🔄 Trial 3: Raw alternative name...");
-          success = await tryDownload(altBlobName, false);
-        }
-
-        // Trial 4: Full prefixed alternative name
-        if (!success && altBlobName && altBlobName !== blobName) {
-          console.log("🔄 Trial 4: Prefixed alternative name...");
-          success = await tryDownload(altBlobName, true);
-        }
-
-        if (!success) {
-          throw new Error("Failed to download blob using all variations. The file may have expired or was uploaded with an incompatible identifier.");
-        }
-
-        console.log("✅ Download complete!");
-      } catch (err: any) {
-        const errorMessage = err instanceof Error ? err.message : "Download failed";
-        console.error("❌ Final Exhaustive Download Error:", errorMessage);
-        setError(errorMessage);
-        throw err;
+        throw lastError || new Error("Failed to download blob using all identifier variations.");
+      } catch (err) {
+        const normalized = normalizeDownloadError(err);
+        setError(normalized.message);
+        throw normalized;
       } finally {
         setIsDownloading(false);
       }

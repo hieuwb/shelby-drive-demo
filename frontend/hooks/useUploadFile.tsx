@@ -43,8 +43,35 @@ async function getTransactionOptions(maxGasAmount: number) {
 }
 
 function normalizeUploadError(err: any): Error {
-  const rawMessage = String(err?.message || err?.toString() || "Upload failed");
+  const parseMessage = (value: string): string => {
+    try {
+      const parsed = JSON.parse(value);
+      if (parsed && typeof parsed === "object") {
+        if (typeof parsed.message === "string" && parsed.message.trim()) return parsed.message;
+        if (typeof parsed.error === "string" && parsed.error.trim()) return parsed.error;
+      }
+    } catch {
+      // Ignore JSON parse errors and use original text.
+    }
+
+    return value;
+  };
+
+  const rawMessage = parseMessage(String(err?.message || err?.toString() || "Upload failed"));
   const upper = rawMessage.toUpperCase();
+  const lower = rawMessage.toLowerCase();
+
+  if (
+    lower.includes("user rejected") ||
+    lower.includes("user denied") ||
+    lower.includes("transaction cancelled") ||
+    lower.includes("transaction canceled") ||
+    lower.includes("cancelled") ||
+    lower.includes("canceled") ||
+    lower.includes("4001")
+  ) {
+    return new Error("TRANSACTION_CANCELLED: Wallet request was cancelled.");
+  }
 
   if (upper.includes("TRANSACTION_EXPIRED")) {
     return new Error(
@@ -56,6 +83,10 @@ function normalizeUploadError(err: any): Error {
     return new Error(
       "MODULE_NOT_FOUND: Drive contract is not available on the active network. Verify module deployment/network config."
     );
+  }
+
+  if (lower.includes("not yet been marked successfully written")) {
+    return new Error("INDEXER_DELAY: Upload submitted but indexer is still syncing. Please retry in a few moments.");
   }
 
   return new Error(rawMessage);

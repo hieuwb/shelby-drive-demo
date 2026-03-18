@@ -2,20 +2,35 @@
 
 import { AptosWalletAdapterProvider } from "@aptos-labs/wallet-adapter-react"
 import { SHELBY_NETWORK, SHELBY_NETWORK_LABEL } from "@/lib/shelby-client"
-import type { ReactNode } from "react"
+import { useEffect, useMemo, useState, type ReactNode } from "react"
 
-const SHELBY_API_KEY = process.env.NEXT_PUBLIC_SHELBY_API_KEY
+const APTOS_API_KEY = process.env.NEXT_PUBLIC_APTOS_API_KEY || process.env.NEXT_PUBLIC_SHELBY_API_KEY
 
 export function WalletProvider({ children }: { children: ReactNode }) {
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  const dappConfig = useMemo(
+    () => ({
+      network: SHELBY_NETWORK,
+      aptosApiKeys: APTOS_API_KEY
+        ? ({ [SHELBY_NETWORK_LABEL]: APTOS_API_KEY } as Record<string, string>)
+        : undefined,
+    }),
+    []
+  )
+
+  if (!mounted) {
+    return <>{children}</>
+  }
+
   return (
     <AptosWalletAdapterProvider
       autoConnect={true}
-      dappConfig={{
-        network: SHELBY_NETWORK,
-        aptosApiKeys: SHELBY_API_KEY
-          ? ({ [SHELBY_NETWORK_LABEL]: SHELBY_API_KEY } as Record<string, string>)
-          : undefined,
-      }}
+      dappConfig={dappConfig}
       onError={(error) => {
         console.error("Wallet adapter error:", error)
       }}

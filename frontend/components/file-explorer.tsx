@@ -48,6 +48,31 @@ interface FileExplorerProps {
   refreshTrigger?: number
 }
 
+function normalizeDeleteError(err: unknown): string {
+  const message = String((err as any)?.message || err || "Unknown error")
+  const lower = message.toLowerCase()
+
+  if (
+    lower.includes("user rejected") ||
+    lower.includes("user denied") ||
+    lower.includes("transaction cancelled") ||
+    lower.includes("transaction canceled") ||
+    lower.includes("4001")
+  ) {
+    return "Transaction was cancelled in wallet."
+  }
+
+  if (lower.includes("transaction_expired")) {
+    return "Transaction expired before execution. Please retry."
+  }
+
+  if (lower.includes("module_not_found") || lower.includes("function_not_found")) {
+    return "Drive contract is not available on this network."
+  }
+
+  return message
+}
+
 export default function FileExplorer({ walletAddress, currentView = "my-drive", refreshTrigger = 0 }: FileExplorerProps) {
   const [files, setFiles] = useState<FileItem[]>([])
   const [searchQuery, setSearchQuery] = useState("")
@@ -171,7 +196,7 @@ export default function FileExplorer({ walletAddress, currentView = "my-drive", 
       await fetchFiles()
     } catch (error: any) {
       console.error("Delete error:", error)
-      alert(`Failed to delete file: ${error?.message || "Unknown error"}`)
+      alert(`Failed to delete file: ${normalizeDeleteError(error)}`)
     }
   }
 
